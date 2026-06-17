@@ -1,0 +1,132 @@
+# AutoSpinmotorSystem 系统物理配置文件
+# 文件路径: config/system_config.yaml
+
+communication:
+  rs485_bus_port: "COM9"
+  motor_port: "COM9"
+  pipette_port: "COM9"
+  relay_port: "COM10"
+  gantry_port: "COM11"
+  heating_stage_port: "COM9"
+
+system:
+  name: "AutoSpinmotorSystem"
+  use_gantry: true
+  use_human_operator: false
+  default_worker_capacity:
+    hotplate: 30
+    storage: 45
+    gantry: 1
+    spincoater: 1
+    characterization: 1
+    human: 1
+
+devices:
+  xyz_stage:
+    hwid_keyword: "1A86:7523" # Mega 2560 CH340
+    baudrate: 115200
+    timeout: 0.5
+    backend: "grbl_l3"
+    grbl_motion:
+      default_feed_mm_min: 2000
+      max_feed_mm_min: 8000
+    safe_z_mm: -5.0
+    steps_per_mm: 1280        # 丝杠导程5mm + 6400细分计算所得
+    default_speed: 5
+    safe_z_height: 64000      # 抬升安全高度
+    limits:                   # 软限位 (steps)
+      min: [0, 0, 0]
+      max: [256000, 256000, 128000]
+
+  relay:
+    hwid_keyword: "1A86:7523" # LCUS-8 CH340
+    baudrate: 9600
+    commands:
+      prefix: 160             # 十六进制 0xA0
+      'on': 1                   # 十六进制 0x01
+      'off': 0                  # 十六进制 0x00
+    channels:
+      gripper: 1
+      z_brake: 2
+      z_brake_grbl: 2
+      nitrogen: 2
+      vacuum_valve: 3
+      pump: 3
+      spin_power: 4
+      aux_light: 5
+
+  spin_motor:
+    hwid_keyword: "1A86:7523" # Modbus RS485
+    slave_id: 2
+    baudrate: 9600
+    timeout: 2.0
+    pole_pairs: 4
+    registers:                # 常用寄存器
+      speed_set: 32773        # 十六进制 0x8005
+      bus_voltage: 32793      # 十六进制 0x8019
+
+  pipette:
+    hwid_keyword: "04E2:1411" # XR21B1411
+    slave_id: 1
+    baudrate: 115200
+    timeout: 2.0
+    max_volume_ul: 1000       # 最大量程
+
+  heating_stage:
+    model: "AI-516 D2 G S"
+    protocol: "modbus"        # Instrument AFC must be 0 for standard Modbus.
+    slave_id: 3
+    baudrate: 9600
+    parity: "N"
+    timeout: 3.0
+    read_func: "holding"      # AI-516 Modbus mode documents 03H reads.
+    sv_addr: 0                # AI-516 40001: target temperature SV, writable by 06H.
+    pv_addr: 74               # AI-516 40075: current temperature PV, read by 03H.
+    srun_addr: 27             # AI-516 40028: Srun; 0 means run/fixed-point control.
+    run_on_sv_write: true     # Send Srun=0 after writing SV so the new setpoint takes effect.
+    scale: 10.0
+
+geometry:
+  # 关键工位绝对坐标 (mm)
+  lab_coordinates:
+    home: [0.0, 0.0, 0.0]
+    spin_center: [50.0, 50.0, 5.0]
+    clean_station: [10.0, 150.0, 20.0]
+    waste_bin: [180.0, 180.0, 10.0]
+  
+  # 工具中心点偏移 (TCP Offsets)
+  # 以导轨 Z 轴可移动平台中心为 (0,0,0)
+  tool_offsets:
+    gripper:
+      x: -74.8
+      y: 31.5
+      z: 51.5
+    pipette:
+      x: 71.5
+      y: 35.0
+      z: 20.5
+      tip_length: 95.0 # 吸头长度 (单独列出，因为易耗品会更换)
+
+scheduler:
+  # 为调度器提供任务预估耗时 (s)
+  task_estimated_durations:
+    spincoat: 60
+    anneal: 300
+    characterize: 160
+    mix: 120
+    rest: 180
+  
+  # 任务之间的过渡时间 (s)
+  transition_durations:
+    spincoater_to_hotplate: 27
+    spincoater_to_storage: 30
+    spincoater_to_characterization: 33
+    hotplate_to_spincoater: 33
+    hotplate_to_storage: 18
+    hotplate_to_characterization: 18
+    storage_to_spincoater: 33
+    storage_to_hotplate: 18
+    storage_to_characterization: 15
+    characterization_to_spincoater: 33
+    characterization_to_hotplate: 18
+    characterization_to_storage: 18

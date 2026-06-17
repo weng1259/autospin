@@ -1,0 +1,21 @@
+# 硬编码安全边界（ADR-004 §原则 5）
+# 修改本文件需要 code review，运行时 Agent 不可改。
+# 加载点：src/config.py → load_config()
+
+soft_limits:
+  # 机器坐标系：归零后原点在 +极限，所有合法位置 ≤ 0
+  # 两端各留 5mm 余量（= $27 pull-off）：命令到 -5 时 jog 停在 -5，不压 + 限位
+  # 行程利用率：X/Y 270/280=96%, Z 85/95=89%
+  x_min_mm: -310.0
+  x_max_mm: -5.0
+  y_min_mm: -295.0
+  y_max_mm: -5.0
+  z_min_mm: -95.0
+  z_max_mm: -5.0
+
+motion:
+  default_feed_mm_min: 2000
+  max_feed_mm_min: 8000
+  move_timeout_s: 60
+  # 后台状态轮询间隔（ms）。UI fragment 读内存快照，不受此值影响。
+  status_poll_interval_ms: 200

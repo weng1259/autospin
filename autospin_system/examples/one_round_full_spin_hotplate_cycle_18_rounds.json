@@ -1,0 +1,4813 @@
+{
+  "experiment_name": "perovskite_spin_coating_with_antisolvent (18 rounds)",
+  "rounds": 18,
+  "operations_per_round": 42,
+  "operations": [
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "SetHotplateTemperature",
+      "params": {
+        "temperature_C": 100
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -34.0,
+        "y": -364.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -50.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 1
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -11.0,
+        "y": -147.0,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -61.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 2
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -11.0,
+        "y": -147.0,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "SpinStart",
+      "params": {
+        "direction": "forward",
+        "rpm": 1000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinSetSpeed",
+      "params": {
+        "rpm": 3000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 20
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinStop",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "CheckHotplateTemperature",
+      "params": {
+        "target_C": 100,
+        "tolerance_C": 2,
+        "timeout_s": 300
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "AnnealWait",
+      "params": {
+        "time_s": 600
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -34.0,
+        "y": -364.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "SetHotplateTemperature",
+      "params": {
+        "temperature_C": 100
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -71.25,
+        "y": -364.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -50.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 1
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -11.0,
+        "y": -147.0,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -61.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 2
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -11.0,
+        "y": -147.0,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "SpinStart",
+      "params": {
+        "direction": "forward",
+        "rpm": 1000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinSetSpeed",
+      "params": {
+        "rpm": 3000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 20
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinStop",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "CheckHotplateTemperature",
+      "params": {
+        "target_C": 100,
+        "tolerance_C": 2,
+        "timeout_s": 300
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "AnnealWait",
+      "params": {
+        "time_s": 600
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -71.25,
+        "y": -364.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "SetHotplateTemperature",
+      "params": {
+        "temperature_C": 100
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -108.5,
+        "y": -364.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -50.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 1
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -11.0,
+        "y": -127.8,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -61.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 2
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -11.0,
+        "y": -127.8,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "SpinStart",
+      "params": {
+        "direction": "forward",
+        "rpm": 1000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinSetSpeed",
+      "params": {
+        "rpm": 3000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 20
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinStop",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "CheckHotplateTemperature",
+      "params": {
+        "target_C": 100,
+        "tolerance_C": 2,
+        "timeout_s": 300
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "AnnealWait",
+      "params": {
+        "time_s": 600
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -108.5,
+        "y": -364.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "SetHotplateTemperature",
+      "params": {
+        "temperature_C": 100
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -145.75,
+        "y": -364.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -50.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 1
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -11.0,
+        "y": -127.8,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -61.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 2
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -11.0,
+        "y": -127.8,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "SpinStart",
+      "params": {
+        "direction": "forward",
+        "rpm": 1000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinSetSpeed",
+      "params": {
+        "rpm": 3000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 20
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinStop",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "CheckHotplateTemperature",
+      "params": {
+        "target_C": 100,
+        "tolerance_C": 2,
+        "timeout_s": 300
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "AnnealWait",
+      "params": {
+        "time_s": 600
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -145.75,
+        "y": -364.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "SetHotplateTemperature",
+      "params": {
+        "temperature_C": 100
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -183.0,
+        "y": -364.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -50.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 1
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -11.0,
+        "y": -108.6,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -61.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 2
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -11.0,
+        "y": -108.6,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "SpinStart",
+      "params": {
+        "direction": "forward",
+        "rpm": 1000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinSetSpeed",
+      "params": {
+        "rpm": 3000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 20
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinStop",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "CheckHotplateTemperature",
+      "params": {
+        "target_C": 100,
+        "tolerance_C": 2,
+        "timeout_s": 300
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "AnnealWait",
+      "params": {
+        "time_s": 600
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -183.0,
+        "y": -364.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "SetHotplateTemperature",
+      "params": {
+        "temperature_C": 100
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -34.0,
+        "y": -388.33,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -50.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 1
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -11.0,
+        "y": -108.6,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -61.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 2
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -11.0,
+        "y": -108.6,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "SpinStart",
+      "params": {
+        "direction": "forward",
+        "rpm": 1000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinSetSpeed",
+      "params": {
+        "rpm": 3000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 20
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinStop",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "CheckHotplateTemperature",
+      "params": {
+        "target_C": 100,
+        "tolerance_C": 2,
+        "timeout_s": 300
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "AnnealWait",
+      "params": {
+        "time_s": 600
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -34.0,
+        "y": -388.33,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "SetHotplateTemperature",
+      "params": {
+        "temperature_C": 100
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -71.25,
+        "y": -388.33,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -50.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 1
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -11.0,
+        "y": -89.4,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -61.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 2
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -11.0,
+        "y": -89.4,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "SpinStart",
+      "params": {
+        "direction": "forward",
+        "rpm": 1000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinSetSpeed",
+      "params": {
+        "rpm": 3000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 20
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinStop",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "CheckHotplateTemperature",
+      "params": {
+        "target_C": 100,
+        "tolerance_C": 2,
+        "timeout_s": 300
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "AnnealWait",
+      "params": {
+        "time_s": 600
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -71.25,
+        "y": -388.33,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "SetHotplateTemperature",
+      "params": {
+        "temperature_C": 100
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -145.75,
+        "y": -388.33,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -50.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 1
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -11.0,
+        "y": -89.4,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -61.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 2
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -11.0,
+        "y": -89.4,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "SpinStart",
+      "params": {
+        "direction": "forward",
+        "rpm": 1000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinSetSpeed",
+      "params": {
+        "rpm": 3000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 20
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinStop",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "CheckHotplateTemperature",
+      "params": {
+        "target_C": 100,
+        "tolerance_C": 2,
+        "timeout_s": 300
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "AnnealWait",
+      "params": {
+        "time_s": 600
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -145.75,
+        "y": -388.33,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "SetHotplateTemperature",
+      "params": {
+        "temperature_C": 100
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -183.0,
+        "y": -388.33,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -50.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 1
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -11.0,
+        "y": -70.2,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -61.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 2
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -11.0,
+        "y": -70.2,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "SpinStart",
+      "params": {
+        "direction": "forward",
+        "rpm": 1000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinSetSpeed",
+      "params": {
+        "rpm": 3000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 20
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinStop",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "CheckHotplateTemperature",
+      "params": {
+        "target_C": 100,
+        "tolerance_C": 2,
+        "timeout_s": 300
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "AnnealWait",
+      "params": {
+        "time_s": 600
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -183.0,
+        "y": -388.33,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "SetHotplateTemperature",
+      "params": {
+        "temperature_C": 100
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -34.0,
+        "y": -412.66,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -50.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 1
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -11.0,
+        "y": -70.2,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -61.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 2
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -11.0,
+        "y": -70.2,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "SpinStart",
+      "params": {
+        "direction": "forward",
+        "rpm": 1000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinSetSpeed",
+      "params": {
+        "rpm": 3000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 20
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinStop",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "CheckHotplateTemperature",
+      "params": {
+        "target_C": 100,
+        "tolerance_C": 2,
+        "timeout_s": 300
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "AnnealWait",
+      "params": {
+        "time_s": 600
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -34.0,
+        "y": -412.66,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "SetHotplateTemperature",
+      "params": {
+        "temperature_C": 100
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -71.25,
+        "y": -412.66,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -50.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 1
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -11.0,
+        "y": -51.0,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -61.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 2
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -11.0,
+        "y": -51.0,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "SpinStart",
+      "params": {
+        "direction": "forward",
+        "rpm": 1000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinSetSpeed",
+      "params": {
+        "rpm": 3000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 20
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinStop",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "CheckHotplateTemperature",
+      "params": {
+        "target_C": 100,
+        "tolerance_C": 2,
+        "timeout_s": 300
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "AnnealWait",
+      "params": {
+        "time_s": 600
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -71.25,
+        "y": -412.66,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "SetHotplateTemperature",
+      "params": {
+        "temperature_C": 100
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -145.75,
+        "y": -412.66,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -50.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 1
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -11.0,
+        "y": -51.0,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -61.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 2
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -11.0,
+        "y": -51.0,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "SpinStart",
+      "params": {
+        "direction": "forward",
+        "rpm": 1000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinSetSpeed",
+      "params": {
+        "rpm": 3000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 20
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinStop",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "CheckHotplateTemperature",
+      "params": {
+        "target_C": 100,
+        "tolerance_C": 2,
+        "timeout_s": 300
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "AnnealWait",
+      "params": {
+        "time_s": 600
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -145.75,
+        "y": -412.66,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "SetHotplateTemperature",
+      "params": {
+        "temperature_C": 100
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -183.0,
+        "y": -412.66,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -50.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 1
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -49.4,
+        "y": -147.0,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -61.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 2
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -49.4,
+        "y": -147.0,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "SpinStart",
+      "params": {
+        "direction": "forward",
+        "rpm": 1000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinSetSpeed",
+      "params": {
+        "rpm": 3000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 20
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinStop",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "CheckHotplateTemperature",
+      "params": {
+        "target_C": 100,
+        "tolerance_C": 2,
+        "timeout_s": 300
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "AnnealWait",
+      "params": {
+        "time_s": 600
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -183.0,
+        "y": -412.66,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "SetHotplateTemperature",
+      "params": {
+        "temperature_C": 100
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -34.0,
+        "y": -436.99,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -50.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 1
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -49.4,
+        "y": -147.0,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -61.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 2
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -49.4,
+        "y": -147.0,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "SpinStart",
+      "params": {
+        "direction": "forward",
+        "rpm": 1000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinSetSpeed",
+      "params": {
+        "rpm": 3000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 20
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinStop",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "CheckHotplateTemperature",
+      "params": {
+        "target_C": 100,
+        "tolerance_C": 2,
+        "timeout_s": 300
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "AnnealWait",
+      "params": {
+        "time_s": 600
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -34.0,
+        "y": -436.99,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "SetHotplateTemperature",
+      "params": {
+        "temperature_C": 100
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -71.25,
+        "y": -436.99,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -50.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 1
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -49.4,
+        "y": -127.8,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -61.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 2
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -49.4,
+        "y": -127.8,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "SpinStart",
+      "params": {
+        "direction": "forward",
+        "rpm": 1000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinSetSpeed",
+      "params": {
+        "rpm": 3000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 20
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinStop",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "CheckHotplateTemperature",
+      "params": {
+        "target_C": 100,
+        "tolerance_C": 2,
+        "timeout_s": 300
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "AnnealWait",
+      "params": {
+        "time_s": 600
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -71.25,
+        "y": -436.99,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "SetHotplateTemperature",
+      "params": {
+        "temperature_C": 100
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -108.5,
+        "y": -436.99,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -50.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 1
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -49.4,
+        "y": -127.8,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -61.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 2
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -49.4,
+        "y": -127.8,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "SpinStart",
+      "params": {
+        "direction": "forward",
+        "rpm": 1000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinSetSpeed",
+      "params": {
+        "rpm": 3000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 20
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinStop",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "CheckHotplateTemperature",
+      "params": {
+        "target_C": 100,
+        "tolerance_C": 2,
+        "timeout_s": 300
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "AnnealWait",
+      "params": {
+        "time_s": 600
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -108.5,
+        "y": -436.99,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "SetHotplateTemperature",
+      "params": {
+        "temperature_C": 100
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -145.75,
+        "y": -436.99,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -50.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 1
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -49.4,
+        "y": -108.6,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -61.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 2
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -49.4,
+        "y": -108.6,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "SpinStart",
+      "params": {
+        "direction": "forward",
+        "rpm": 1000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinSetSpeed",
+      "params": {
+        "rpm": 3000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 20
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinStop",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "CheckHotplateTemperature",
+      "params": {
+        "target_C": 100,
+        "tolerance_C": 2,
+        "timeout_s": 300
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "AnnealWait",
+      "params": {
+        "time_s": 600
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -145.75,
+        "y": -436.99,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "SetHotplateTemperature",
+      "params": {
+        "temperature_C": 100
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -183.0,
+        "y": -436.99,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -50.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 1
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -49.4,
+        "y": -108.6,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "perovskite_precursor",
+        "volume_uL": 50
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -100.0,
+        "y": -61.0,
+        "z": -150.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "PipetteMountTip",
+      "params": {
+        "tip_index": 2
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -49.4,
+        "y": -108.6,
+        "z": -145.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "PipetteAspirate",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -120.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "SpinStart",
+      "params": {
+        "direction": "forward",
+        "rpm": 1000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinSetSpeed",
+      "params": {
+        "rpm": 3000
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 20
+      }
+    },
+    {
+      "operation": "PipetteDispense",
+      "params": {
+        "liquid": "antisolvent",
+        "volume_uL": 150
+      }
+    },
+    {
+      "operation": "Wait",
+      "params": {
+        "time_s": 10
+      }
+    },
+    {
+      "operation": "SpinStop",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -400.0,
+        "y": -5.0,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "CheckHotplateTemperature",
+      "params": {
+        "target_C": 100,
+        "tolerance_C": 2,
+        "timeout_s": 300
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "AnnealWait",
+      "params": {
+        "time_s": 600
+      }
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -430.0,
+        "y": -320.0,
+        "z": -175.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperClose",
+      "params": {}
+    },
+    {
+      "operation": "MoveGantrySafe",
+      "params": {
+        "x": -183.0,
+        "y": -436.99,
+        "z": -156.0,
+        "safe_z": -50.0
+      }
+    },
+    {
+      "operation": "GripperOpen",
+      "params": {}
+    },
+    {
+      "operation": "HomeGantry",
+      "params": {}
+    },
+    {
+      "operation": "ReadStatus",
+      "params": {
+        "device": "all"
+      }
+    }
+  ]
+}

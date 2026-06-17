@@ -1,0 +1,10 @@
+liquids:
+  perovskite_precursor:
+    display_name: "Perovskite precursor solution"
+    location: "precursor_vial"
+    max_volume_ul: 2000
+
+  antisolvent:
+    display_name: "Antisolvent"
+    location: "antisolvent_vial"
+    max_volume_ul: 5000

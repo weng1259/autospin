@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 虚拟环境
+.venv/
+venv/
+
+# 日志与运行时产物
+logs/
+runtime/
+hardware/xyz_stage/runtime/
+*.log
+*.db
+
+# 实验数据
+data/
+
+# 编辑器 / 操作系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

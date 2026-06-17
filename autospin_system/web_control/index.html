@@ -1,0 +1,698 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>XYZ 导轨调试控制台</title>
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --ink: #1f2933;
+      --muted: #667085;
+      --line: #d9dee7;
+      --blue: #1769e0;
+      --green: #238a46;
+      --red: #c93535;
+      --orange: #b56912;
+      --shadow: 0 8px 26px rgba(15, 23, 42, .08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+    }
+    header {
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--line);
+      background: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    h1 { margin: 0; font-size: 20px; letter-spacing: 0; }
+    .state-pill {
+      min-width: 128px;
+      text-align: center;
+      padding: 8px 12px;
+      border-radius: 6px;
+      background: #edf0f4;
+      color: var(--muted);
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .state-pill.idle { background: #e7f5ec; color: var(--green); }
+    .state-pill.alarm, .state-pill.disconnected { background: #fae9e9; color: var(--red); }
+    .state-pill.jog, .state-pill.run, .state-pill.home { background: #e8f1ff; color: var(--blue); }
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 20px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.3fr) minmax(320px, .7fr);
+      gap: 16px;
+    }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+    h2 {
+      margin: 0 0 12px;
+      font-size: 13px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    label { font-size: 12px; color: var(--muted); display: grid; gap: 4px; }
+    input {
+      height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 0 10px;
+      font: inherit;
+      min-width: 88px;
+      background: #fff;
+    }
+    input[type="checkbox"] { height: auto; min-width: auto; }
+    button {
+      height: 36px;
+      border: 0;
+      border-radius: 6px;
+      padding: 0 14px;
+      font: inherit;
+      font-weight: 700;
+      color: #fff;
+      background: var(--blue);
+      cursor: pointer;
+    }
+    button.secondary { background: #596579; }
+    button.success { background: var(--green); }
+    button.warning { background: var(--orange); }
+    button.danger { background: var(--red); }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      background: #fbfcfe;
+    }
+    .metric b { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+    .metric span { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .plot {
+      aspect-ratio: 1.5;
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfe;
+      display: block;
+    }
+    .jog {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .axis-box {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+    .axis-title { font-weight: 800; }
+    .axis-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .log {
+      height: 220px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #0e1726;
+      color: #d8e2f1;
+      padding: 10px;
+      font: 12px/1.45 Consolas, monospace;
+      white-space: pre-wrap;
+    }
+    .status-details {
+      display: grid;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .status-details code {
+      color: var(--ink);
+      background: #f1f3f7;
+      padding: 2px 4px;
+      border-radius: 4px;
+    }
+    .records {
+      display: grid;
+      gap: 8px;
+      max-height: 260px;
+      overflow: auto;
+    }
+    .record {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      background: #fbfcfe;
+      font-size: 12px;
+      display: grid;
+      gap: 5px;
+    }
+    .record b { font-size: 13px; }
+    .record code { color: var(--ink); }
+    @media (max-width: 860px) {
+      main { grid-template-columns: 1fr; padding: 12px; }
+      header { align-items: flex-start; flex-direction: column; }
+      .jog, .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>XYZ 导轨调试控制台</h1>
+    <div id="state" class="state-pill disconnected">disconnected</div>
+  </header>
+
+  <main>
+    <div style="display:grid; gap:16px;">
+      <section>
+        <h2>连接</h2>
+        <div class="row">
+          <label>导轨串口 <input id="gantryPort" value="COM11"></label>
+          <label>继电器串口 <input id="relayPort" value="COM10"></label>
+          <label>移液枪串口 <input id="pipettePort" value="COM4"></label>
+          <label style="display:flex;align-items:center;gap:6px;margin-top:18px;">
+            <input id="mock" type="checkbox"> mock
+          </label>
+          <button id="connectBtn" onclick="connect()">连接</button>
+          <button class="secondary" onclick="disconnect()">断开</button>
+          <button class="secondary" onclick="refreshStatus()">刷新状态</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>位置</h2>
+        <div class="grid">
+          <div class="metric"><b>X mm</b><span id="xVal">0.000</span></div>
+          <div class="metric"><b>Y mm</b><span id="yVal">0.000</span></div>
+          <div class="metric"><b>Z mm</b><span id="zVal">0.000</span></div>
+          <div class="metric"><b>Z2/A mm</b><span id="z2MetricVal">0.000</span></div>
+        </div>
+        <canvas id="plot" class="plot" width="900" height="600"></canvas>
+      </section>
+
+      <section>
+        <h2>动作</h2>
+        <div class="row" style="margin-bottom:12px;">
+          <button class="success" onclick="home()">归零 HOME</button>
+          <button class="danger" onclick="halt()">急停 / Halt</button>
+          <button class="warning" onclick="recover()">清除并恢复</button>
+          <button class="secondary" onclick="homingDiagnostics()">归零诊断</button>
+          <button class="secondary" onclick="initializeZ2()">声明 Z2=A0</button>
+          <button class="warning" onclick="setZBrake(true)">释放Z刹车</button>
+          <button class="secondary" onclick="setZBrake(false)">锁回Z刹车</button>
+        </div>
+        <div class="row" style="margin-bottom:12px;">
+          <label>目标 X <input id="absX" type="number" step="0.001" value="-20"></label>
+          <label>目标 Y <input id="absY" type="number" step="0.001" value="-20"></label>
+          <label>目标 Z <input id="absZ" type="number" step="0.001" value="-10"></label>
+          <label>Feed <input id="feed" type="number" step="50" value="1000"></label>
+          <button class="secondary" onclick="dryRun()">绝对预检</button>
+          <button onclick="moveAbs()">移动到坐标</button>
+        </div>
+        <div class="row" style="margin-bottom:12px;">
+          <label>ΔX <input id="relX" type="number" step="0.001" value="0"></label>
+          <label>ΔY <input id="relY" type="number" step="0.001" value="0"></label>
+          <label>ΔZ <input id="relZ" type="number" step="0.001" value="-5"></label>
+          <button class="secondary" onclick="dryRunRel()">相对预检</button>
+          <button onclick="moveRel(num('relX'), num('relY'), num('relZ'))">相对移动</button>
+        </div>
+        <div class="row" style="margin-bottom:12px;">
+          <label>A/Z2 Feed <input id="z2Feed" type="number" step="10" value="100"></label>
+          <button class="secondary" onclick="declareZ2Preset(0)">Set A0</button>
+          <button class="secondary" onclick="declareZ2Preset(25)">Set A25</button>
+          <button class="secondary" onclick="declareZ2Preset(50)">Set A50</button>
+          <button class="secondary" onclick="declareZ2Preset(75)">Set A75</button>
+          <button class="secondary" onclick="declareZ2Preset(100)">Set A100</button>
+          <button class="secondary" onclick="declareZ2Preset(125)">Set A125</button>
+          <label>Custom A <input id="z2Declare" type="number" step="0.001" min="0" max="125" value="0"></label>
+          <button class="secondary" onclick="declareZ2Custom()">Set Custom A</button>
+          <button class="secondary" onclick="moveZ2Preset(0)">Move A0</button>
+          <button class="secondary" onclick="moveZ2Preset(25)">A25</button>
+          <button class="secondary" onclick="moveZ2Preset(50)">A50</button>
+          <button class="secondary" onclick="moveZ2Preset(75)">A75</button>
+          <button class="secondary" onclick="moveZ2Preset(100)">A100</button>
+          <button class="secondary" onclick="moveZ2Preset(125)">A125</button>
+          <button class="warning" onclick="moveZ2Step(-50)">A-50</button>
+          <button class="warning" onclick="moveZ2Step(-25)">A-25</button>
+          <button class="warning" onclick="moveZ2Step(25)">A+25</button>
+          <button class="warning" onclick="moveZ2Step(50)">A+50</button>
+        </div>
+        <div class="row" style="margin-bottom:12px;">
+          <label>吸/吐液体积 uL <input id="pipetteVolume" type="number" step="1" min="1" value="100"></label>
+          <label>吸液检测掩码 <input id="detectMask" type="number" step="1" min="0" max="7" value="0"></label>
+          <button class="success" onclick="aspirate()">吸液</button>
+          <button class="warning" onclick="dispense()">吐液</button>
+        </div>
+        <div class="row" style="margin-bottom:12px;">
+          <label>位置名称 <input id="recordName" value="pipette_point"></label>
+          <label>备注 <input id="recordNote" value=""></label>
+          <button class="secondary" onclick="recordPosition()">记录当前位置</button>
+        </div>
+        <div class="jog">
+          <div class="axis-box">
+            <div class="axis-title">X 轴</div>
+            <div class="axis-actions">
+              <button onclick="moveRel(-step(),0,0)">X-</button>
+              <button onclick="moveRel(step(),0,0)">X+</button>
+            </div>
+          </div>
+          <div class="axis-box">
+            <div class="axis-title">Y 轴</div>
+            <div class="axis-actions">
+              <button onclick="moveRel(0,-step(),0)">Y-</button>
+              <button onclick="moveRel(0,step(),0)">Y+</button>
+            </div>
+          </div>
+          <div class="axis-box">
+            <div class="axis-title">Z 轴</div>
+            <div class="axis-actions">
+              <button onclick="moveRel(0,0,-step())">Z-</button>
+              <button onclick="moveRel(0,0,step())">Z+</button>
+            </div>
+          </div>
+        </div>
+        <div class="row" style="margin-top:12px;">
+          <label>点动步长 mm <input id="step" type="number" step="1" value="5"></label>
+        </div>
+        <div class="row" style="margin-top:12px;">
+          <label>脱困步长 mm <input id="manualStep" type="number" step="0.5" value="2"></label>
+          <label>脱困速度 <input id="manualFeed" type="number" step="50" value="300"></label>
+        </div>
+        <div class="jog" style="margin-top:12px;">
+          <div class="axis-box">
+            <div class="axis-title">X 脱困</div>
+            <div class="axis-actions">
+              <button class="warning" onclick="manualJog(-manualStep(),0,0)">X-</button>
+              <button class="warning" onclick="manualJog(manualStep(),0,0)">X+</button>
+            </div>
+          </div>
+          <div class="axis-box">
+            <div class="axis-title">Y 脱困</div>
+            <div class="axis-actions">
+              <button class="warning" onclick="manualJog(0,-manualStep(),0)">Y-</button>
+              <button class="warning" onclick="manualJog(0,manualStep(),0)">Y+</button>
+            </div>
+          </div>
+          <div class="axis-box">
+            <div class="axis-title">Z 脱困</div>
+            <div class="axis-actions">
+              <button class="warning" onclick="manualJog(0,0,-manualStep())">Z-</button>
+              <button class="warning" onclick="manualJog(0,0,manualStep())">Z+</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div style="display:grid; gap:16px; align-content:start;">
+      <section>
+        <h2>状态</h2>
+        <div class="status-details">
+          <div>连接：<code id="connected">false</code></div>
+          <div>已归零：<code id="homed">false</code></div>
+          <div>报警码：<code id="alarm">-</code></div>
+          <div>限位触发：<code id="limitPins">-</code></div>
+          <div>Z2/A：<code id="z2Val">0.000</code></div>
+          <div>移液枪：<code id="pipetteStatus">false</code></div>
+          <div>导轨串口：<code id="gp">-</code></div>
+          <div>继电器串口：<code id="rp">-</code></div>
+          <div>移液枪串口：<code id="pp">-</code></div>
+          <div>后台操作：<code id="operation">-</code></div>
+          <div>归零诊断：<code id="homingDiag">-</code></div>
+          <div>原始状态：<code id="raw">-</code></div>
+        </div>
+      </section>
+      <section>
+        <h2>位置记录</h2>
+        <div id="records" class="records"></div>
+      </section>
+      <section>
+        <h2>日志</h2>
+        <div id="log" class="log"></div>
+      </section>
+    </div>
+  </main>
+
+<script>
+const state = { position: {x_mm: 0, y_mm: 0, z_mm: 0, z2_mm: 0}, connected: false, records: [] };
+let commandBusy = false;
+let statusBusy = false;
+
+function log(msg, kind = "info") {
+  const el = document.getElementById("log");
+  const now = new Date().toLocaleTimeString();
+  el.textContent += `[${now}] ${kind.toUpperCase()} ${msg}\n`;
+  el.scrollTop = el.scrollHeight;
+}
+
+async function api(path, body = null, options = {}) {
+  const busy = options.busy !== false;
+  const timeoutMs = options.timeoutMs || (busy ? 25000 : 4000);
+  if (busy) {
+    if (commandBusy) {
+      log("上一条命令还在执行，忽略本次点击", "warn");
+      throw new Error("command busy");
+    }
+    commandBusy = true;
+    setBusy(true);
+  }
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const opts = body ? {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(body),
+      signal: controller.signal
+    } : {};
+    if (!body) opts.signal = controller.signal;
+    const res = await fetch(path, opts);
+    const data = await res.json();
+    if (!res.ok || data.ok === false) throw new Error(data.error || res.statusText);
+    if (data.status) applyStatus(data.status);
+    return data;
+  } catch (err) {
+    if (err.name === "AbortError") {
+      throw new Error(`请求超时：${path}`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+    if (busy) {
+      commandBusy = false;
+      setBusy(false);
+    }
+  }
+}
+
+function setBusy(busy) {
+  document.querySelectorAll("button").forEach(btn => btn.disabled = busy);
+}
+
+function num(id) { return Number(document.getElementById(id).value); }
+function step() { return Math.abs(num("step") || 1); }
+function feed() { return Math.max(1, num("feed") || 1000); }
+function manualStep() { return Math.min(20, Math.abs(num("manualStep") || 1)); }
+function manualFeed() { return Math.min(600, Math.max(1, num("manualFeed") || 300)); }
+function z2Feed() { return Math.min(300, Math.max(1, num("z2Feed") || 100)); }
+function pipetteVolume() { return Math.max(1, Math.round(num("pipetteVolume") || 1)); }
+function detectMask() { return Math.max(0, Math.min(7, Math.round(num("detectMask") || 0))); }
+
+async function connect() {
+  const data = await api("/api/connect", {
+    gantry_port: document.getElementById("gantryPort").value.trim(),
+    relay_port: document.getElementById("relayPort").value.trim(),
+    pipette_port: document.getElementById("pipettePort").value.trim(),
+    mock: document.getElementById("mock").checked
+  });
+  log(`连接完成: ${JSON.stringify(data.status || data)}`);
+}
+
+async function disconnect() {
+  await api("/api/disconnect", {});
+  applyStatus({connected:false, state:"disconnected", position: state.position});
+  log("已断开");
+}
+
+async function refreshStatus() {
+  if (statusBusy) return;
+  statusBusy = true;
+  try {
+    const data = await api("/api/status", null, {busy: false});
+    applyStatus(data.status);
+  } finally {
+    statusBusy = false;
+  }
+}
+
+async function home() {
+  log("开始归零，导轨会运动");
+  const data = await api("/api/home", {});
+  log(data.accepted ? "归零已开始，后台执行中" : `归零完成: ok=${data.ok}`);
+}
+
+async function halt() {
+  const data = await api("/api/halt", {});
+  log(`急停完成: ok=${data.ok}`, "warn");
+}
+
+async function recover() {
+  const data = await api("/api/recover", {});
+  log(`恢复完成: ok=${data.ok}`, "warn");
+}
+
+async function homingDiagnostics() {
+  const data = await api("/api/homing_diagnostics", {});
+  const diag = data.diagnostics || {};
+  const settings = diag.settings || {};
+  const pins = (diag.limit_pins || []).join("") || "-";
+  const checks = (diag.checks || []).join(" | ");
+  document.getElementById("homingDiag").textContent =
+    `Pn=${pins}; ${Object.entries(settings).map(([k, v]) => `${k}=${v}`).join(", ")}`;
+  log(`归零诊断: Pn=${pins}; ${JSON.stringify(settings)}; ${checks}`, "warn");
+}
+
+async function initializeZ2() {
+  const data = await api("/api/initialize_z2", {});
+  log(`Z2 已按当前位置声明为 A0: ok=${data.ok}`, "warn");
+}
+
+async function declareZ2Preset(z2) {
+  log(`Declare current A/Z2 position as ${z2}mm`);
+  const data = await api("/api/declare_z2_preset", {z2});
+  log(`A/Z2 declared as ${data.target}mm: ok=${data.ok}`, "warn");
+}
+
+async function declareZ2Custom() {
+  const z2 = num("z2Declare");
+  log(`Declare current A/Z2 position as custom ${z2}mm`);
+  const data = await api("/api/declare_z2_preset", {z2});
+  log(`A/Z2 declared as ${data.target}mm: ok=${data.ok}`, "warn");
+}
+
+async function moveZ2Preset(z2) {
+  log(`A/Z2 preset move to ${z2}mm`);
+  const data = await api("/api/move_z2_preset", {z2, feed: z2Feed()});
+  log(`A/Z2 reached ${data.target}mm: ok=${data.ok}`, "warn");
+}
+
+async function moveZ2Step(dz2) {
+  log(`A/Z2 fixed step ${dz2}mm`);
+  const data = await api("/api/move_z2_step", {dz2, feed: z2Feed()});
+  log(`A/Z2 step ${data.delta}mm: ok=${data.ok}`, "warn");
+}
+
+async function setZBrake(released) {
+  const data = await api("/api/z_brake", {released});
+  log(`${released ? "释放" : "锁回"}Z刹车: ok=${data.ok}`, "warn");
+}
+
+async function aspirate() {
+  const volume = pipetteVolume();
+  log(`吸液 ${volume}uL`);
+  const data = await api("/api/aspirate", {volume_ul: volume, detect_mask: detectMask()});
+  log(`吸液完成: ${data.volume_ul}uL ok=${data.ok}`, "warn");
+}
+
+async function dispense() {
+  const volume = pipetteVolume();
+  log(`吐液 ${volume}uL`);
+  const data = await api("/api/dispense", {volume_ul: volume});
+  log(`吐液完成: ${data.volume_ul}uL ok=${data.ok}`, "warn");
+}
+
+async function recordPosition() {
+  const name = document.getElementById("recordName").value.trim();
+  const note = document.getElementById("recordNote").value.trim();
+  const data = await api("/api/record_position", {name, note});
+  state.records = data.records || [];
+  renderRecords();
+  const p = data.record.position;
+  log(`已记录 ${data.record.name}: X=${fmt(p.x_mm)} Y=${fmt(p.y_mm)} Z=${fmt(p.z_mm)} Z2=${fmt(p.z2_mm)}`, "warn");
+  if (data.persisted === false) log("记录已保存在当前网页服务内存中，但未写入本地文件", "warn");
+}
+
+async function dryRun() {
+  const data = await api("/api/dry_run", {
+    x: num("absX"), y: num("absY"), z: num("absZ"), feed: feed()
+  });
+  log(`绝对预检，不会运动: ${JSON.stringify(data.plan)}`);
+}
+
+async function dryRunRel() {
+  const data = await api("/api/dry_run_rel", {
+    dx: num("relX"), dy: num("relY"), dz: num("relZ"), feed: feed()
+  });
+  log(`相对预检，不会运动: target=${JSON.stringify(data.target)} plan=${JSON.stringify(data.plan)}`);
+}
+
+async function moveAbs() {
+  log(`绝对移动到 X=${num("absX")} Y=${num("absY")} Z=${num("absZ")}`);
+  const data = await api("/api/move_abs", {
+    x: num("absX"), y: num("absY"), z: num("absZ"), feed: feed()
+  });
+  log(`移动完成: ok=${data.ok}`);
+}
+
+async function moveRel(dx, dy, dz) {
+  log(`相对移动 dx=${dx} dy=${dy} dz=${dz}`);
+  const data = await api("/api/move_rel", {dx, dy, dz, feed: feed()});
+  log(`点动完成: ok=${data.ok}`);
+}
+
+async function manualJog(dx, dy, dz) {
+  log(`脱困点动 dx=${dx} dy=${dy} dz=${dz}`);
+  const data = await api("/api/manual_jog", {dx, dy, dz, feed: manualFeed()});
+  log(`脱困点动完成: ok=${data.ok}`, "warn");
+}
+
+function applyStatus(s) {
+  state.connected = !!s.connected;
+  state.position = s.position || state.position;
+  const p = state.position;
+  document.getElementById("xVal").textContent = fmt(p.x_mm);
+  document.getElementById("yVal").textContent = fmt(p.y_mm);
+  document.getElementById("zVal").textContent = fmt(p.z_mm);
+  document.getElementById("z2Val").textContent = fmt(p.z2_mm);
+  document.getElementById("z2MetricVal").textContent = fmt(p.z2_mm);
+  document.getElementById("connected").textContent = String(!!s.connected);
+  document.getElementById("homed").textContent = String(!!s.is_homed);
+  document.getElementById("alarm").textContent = s.alarm_code ?? "-";
+  document.getElementById("limitPins").textContent =
+    (s.limit_pins || []).join("") || "-";
+  document.getElementById("gp").textContent = s.gantry_port || "-";
+  document.getElementById("rp").textContent = s.relay_port || "-";
+  const pipette = s.pipette || {};
+  document.getElementById("pp").textContent = pipette.port || "-";
+  document.getElementById("pipetteStatus").textContent =
+    pipette.connected ? `true tip=${pipette.tip_present ?? "-"}` : `false ${pipette.error || ""}`.trim();
+  document.getElementById("operation").textContent = formatOperation(s.operation);
+  document.getElementById("raw").textContent = s.raw || "-";
+  const st = (s.state || (s.connected ? "unknown" : "disconnected")).toString();
+  const pill = document.getElementById("state");
+  pill.className = `state-pill ${st}`;
+  pill.textContent = st;
+  drawPlot();
+}
+
+function fmt(v) { return Number(v || 0).toFixed(3); }
+
+function formatOperation(op) {
+  if (!op) return "-";
+  if (op.running) return `${op.name}: running`;
+  if (op.ok === true) return `${op.name}: done`;
+  if (op.ok === false) return `${op.name}: failed ${op.error || ""}`.trim();
+  return op.name || "-";
+}
+
+async function loadRecords() {
+  const data = await api("/api/position_records", null, {busy: false});
+  state.records = data.records || [];
+  renderRecords();
+}
+
+function renderRecords() {
+  const el = document.getElementById("records");
+  if (!state.records.length) {
+    el.textContent = "暂无记录";
+    return;
+  }
+  el.textContent = "";
+  state.records.slice().reverse().forEach(item => {
+    const p = item.position || {};
+    const div = document.createElement("div");
+    div.className = "record";
+    const note = item.note ? `备注：${item.note}` : "";
+    div.innerHTML = `
+      <b>${escapeHtml(item.name || "-")}</b>
+      <code>${escapeHtml(item.created_at || "")}</code>
+      <code>X=${fmt(p.x_mm)} Y=${fmt(p.y_mm)} Z=${fmt(p.z_mm)} Z2=${fmt(p.z2_mm)}</code>
+      <span>${escapeHtml(note)}</span>
+    `;
+    el.appendChild(div);
+  });
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, ch => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;"
+  }[ch]));
+}
+
+function drawPlot() {
+  const canvas = document.getElementById("plot");
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = "#fbfcfe";
+  ctx.fillRect(0, 0, w, h);
+  const pad = 54;
+  ctx.strokeStyle = "#d9dee7";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(pad, pad, w - pad * 2, h - pad * 2);
+  ctx.fillStyle = "#667085";
+  ctx.font = "16px Segoe UI";
+  ctx.fillText("X/Y 工作区：-275 到 -5 mm", pad, 28);
+
+  for (let i = 0; i <= 5; i++) {
+    const x = pad + (w - pad * 2) * i / 5;
+    const y = pad + (h - pad * 2) * i / 5;
+    ctx.strokeStyle = "#edf0f4";
+    ctx.beginPath(); ctx.moveTo(x, pad); ctx.lineTo(x, h - pad); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(w - pad, y); ctx.stroke();
+  }
+
+  const p = state.position;
+  const toX = v => pad + ((v + 275) / 270) * (w - pad * 2);
+  const toY = v => h - pad - ((v + 275) / 270) * (h - pad * 2);
+  const px = Math.max(pad, Math.min(w - pad, toX(Number(p.x_mm || 0))));
+  const py = Math.max(pad, Math.min(h - pad, toY(Number(p.y_mm || 0))));
+  ctx.strokeStyle = "#1769e0";
+  ctx.beginPath(); ctx.moveTo(px, pad); ctx.lineTo(px, h - pad); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(pad, py); ctx.lineTo(w - pad, py); ctx.stroke();
+  ctx.fillStyle = "#1769e0";
+  ctx.beginPath(); ctx.arc(px, py, 8, 0, Math.PI * 2); ctx.fill();
+}
+
+window.addEventListener("load", () => {
+  applyStatus({connected:false, state:"disconnected", position: state.position});
+  refreshStatus().catch(err => log(err.message, "err"));
+  loadRecords().catch(err => log(err.message, "err"));
+  setInterval(() => refreshStatus().catch(() => {}), 2000);
+});
+
+window.addEventListener("unhandledrejection", event => {
+  const message = event.reason && event.reason.message ? event.reason.message : String(event.reason);
+  log(message, "err");
+});
+</script>
+</body>
+</html>
