@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>夹爪测试面板</title>
+<style>
+  :root {
+    --blue: #0071e3;
+    --blue-hover: #0077ED;
+    --red: #ff3b30;
+    --green: #34c759;
+    --orange: #ff9500;
+    --bg: #f5f5f7;
+    --card: #fff;
+    --text: #1d1d1f;
+    --text2: #86868b;
+    --text3: #ababab;
+    --border: #e8e8ed;
+    --shadow: 0 2px 12px rgba(0,0,0,0.06);
+    --radius: 16px;
+    --radius-sm: 10px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* ===== Header ===== */
+  .header {
+    text-align: center;
+    padding: 40px 20px 20px;
+  }
+  .header h1 {
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    color: var(--text);
+  }
+  .header p {
+    font-size: 14px;
+    color: var(--text2);
+    margin-top: 6px;
+  }
+
+  /* ===== Layout ===== */
+  .container {
+    max-width: 520px;
+    margin: 0 auto;
+    padding: 0 20px 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .card {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 24px;
+    box-shadow: var(--shadow);
+  }
+  .card-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 16px;
+  }
+
+  /* ===== Connection Card ===== */
+  .conn-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .conn-btn {
+    flex: 1;
+    padding: 12px 20px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: var(--blue);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+  }
+  .conn-btn:hover { background: var(--blue-hover); }
+  .conn-btn:active { transform: scale(0.97); }
+  .conn-btn:disabled { background: var(--text3); cursor: not-allowed; }
+  .conn-btn.connected { background: var(--green); }
+
+  .baud-select {
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    background: #fff;
+    color: var(--text);
+    outline: none;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2386868b' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 32px;
+  }
+
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--red);
+    flex-shrink: 0;
+    transition: background 0.3s;
+  }
+  .status-dot.on { background: var(--green); }
+
+  .conn-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text2);
+  }
+
+  /* ===== Gripper Visual ===== */
+  .gripper-visual {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+  }
+  .gripper-svg-wrap {
+    width: 200px;
+    height: 140px;
+    position: relative;
+  }
+  .gripper-svg-wrap svg { width: 100%; height: 100%; }
+  .jaw {
+    transition: transform 0.3s ease;
+  }
+  .jaw-left { transform: translateX(calc(var(--jaw-offset, 0) * -1px)); }
+  .jaw-right { transform: translateX(calc(var(--jaw-offset, 0) * 1px)); }
+
+  .gripper-distance {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.5px;
+  }
+  .gripper-distance span {
+    font-size: 14px;
+    font-weight: 400;
+    color: var(--text2);
+  }
+
+  /* ===== Control Buttons ===== */
+  .ctrl-row {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin-top: 8px;
+  }
+  .ctrl-btn {
+    flex: 1;
+    max-width: 160px;
+    padding: 14px 20px;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.1s, opacity 0.2s;
+    color: #fff;
+  }
+  .ctrl-btn:active { transform: scale(0.95); }
+  .ctrl-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .ctrl-btn.open { background: var(--blue); }
+  .ctrl-btn.close { background: var(--blue); }
+  .ctrl-btn.stop { background: var(--red); }
+
+  /* ===== Force Meter ===== */
+  .meter-row {
+    display: flex;
+    gap: 20px;
+    margin-top: 16px;
+  }
+  .meter {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .meter-label {
+    font-size: 12px;
+    color: var(--text2);
+  }
+  .meter-value {
+    font-size: 20px;
+    font-weight: 700;
+  }
+  .meter-bar-wrap {
+    width: 100%;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .meter-bar {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--blue);
+    transition: width 0.3s;
+  }
+  .meter-bar.force { background: var(--orange); }
+
+  /* ===== Slider ===== */
+  .slider-group {
+    margin-top: 16px;
+  }
+  .slider-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .slider-label { font-size: 13px; color: var(--text2); }
+  .slider-val { font-size: 13px; font-weight: 600; }
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border);
+    outline: none;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.04);
+    cursor: pointer;
+  }
+
+  /* ===== Probe Card ===== */
+  .probe-btns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .probe-btn {
+    padding: 8px 16px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    background: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .probe-btn:hover { background: #f0f0f5; border-color: var(--text3); }
+  .probe-btn:active { transform: scale(0.96); }
+  .probe-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  /* ===== Send Row ===== */
+  .send-row {
+    display: flex;
+    gap: 8px;
+  }
+  .send-input {
+    flex: 1;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    font-family: 'SF Mono', 'Menlo', monospace;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .send-input:focus { border-color: var(--blue); }
+  .send-input::placeholder { color: var(--text3); }
+
+  .send-btn {
+    padding: 10px 16px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: var(--blue);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .send-btn:active { transform: scale(0.96); }
+  .send-btn:disabled { background: var(--text3); cursor: not-allowed; }
+
+  .send-mode {
+    display: flex;
+    gap: 0;
+    margin-bottom: 10px;
+  }
+  .mode-btn {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid var(--border);
+    background: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    color: var(--text2);
+    transition: all 0.15s;
+  }
+  .mode-btn:first-child { border-radius: 8px 0 0 8px; }
+  .mode-btn:last-child { border-radius: 0 8px 8px 0; border-left: none; }
+  .mode-btn.active {
+    background: var(--blue);
+    color: #fff;
+    border-color: var(--blue);
+  }
+
+  /* ===== Log ===== */
+  .log-wrap {
+    position: relative;
+  }
+  .log {
+    height: 200px;
+    overflow-y: auto;
+    background: #fafafa;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    font-family: 'SF Mono', 'Menlo', monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--text2);
+  }
+  .log-entry.tx { color: var(--blue); }
+  .log-entry.rx { color: var(--green); font-weight: 500; }
+  .log-entry.info { color: var(--text3); font-style: italic; }
+  .log-entry.error { color: var(--red); }
+
+  .log-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .log-action-btn {
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #fff;
+    font-size: 12px;
+    color: var(--text2);
+    cursor: pointer;
+  }
+  .log-action-btn:hover { background: #f0f0f5; }
+
+  /* ===== Wiring Diagram ===== */
+  .wiring {
+    font-size: 13px;
+    color: var(--text2);
+    line-height: 2;
+  }
+  .wiring-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+  }
+  .wiring-table td {
+    padding: 6px 10px;
+    font-size: 13px;
+    border-bottom: 1px solid var(--border);
+  }
+  .wiring-table td:first-child {
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .wiring-table .arrow { color: var(--text3); text-align: center; width: 30px; }
+  .wiring-table tr:last-child td { border: none; }
+
+  /* ===== Toggle (wiring) ===== */
+  .toggle-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+  }
+  .toggle-icon {
+    font-size: 18px;
+    color: var(--text3);
+    transition: transform 0.2s;
+  }
+  .toggle-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+  }
+  .toggle-content.open {
+    max-height: 400px;
+  }
+
+  /* ===== Responsive ===== */
+  @media (max-width: 480px) {
+    .header h1 { font-size: 26px; }
+    .header { padding: 30px 16px 16px; }
+    .container { padding: 0 12px 30px; gap: 12px; }
+    .card { padding: 18px; border-radius: 14px; }
+    .ctrl-btn { padding: 12px 14px; font-size: 14px; }
+    .gripper-svg-wrap { width: 160px; height: 120px; }
+    .gripper-distance { font-size: 24px; }
+    .log { height: 160px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>夹爪测试面板</h1>
+  <p>混合伺服力控电夹爪 Y1 &middot; RS485</p>
+</div>
+
+<div class="container">
+
+  <!-- ===== 连接 ===== -->
+  <div class="card">
+    <div class="card-title">连接</div>
+    <div class="conn-row">
+      <button id="connBtn" class="conn-btn" onclick="toggleConnection()">连接 RS485</button>
+      <select id="baudSelect" class="baud-select">
+        <option value="9600">9600</option>
+        <option value="19200">19200</option>
+        <option value="38400">38400</option>
+        <option value="57600">57600</option>
+        <option value="115200">115200</option>
+      </select>
+    </div>
+    <div class="conn-status">
+      <div id="statusDot" class="status-dot"></div>
+      <span id="statusText">未连接</span>
+    </div>
+  </div>
+
+  <!-- ===== 夹爪控制 ===== -->
+  <div class="card">
+    <div class="card-title">控制</div>
+    <div class="gripper-visual">
+      <!-- Gripper SVG -->
+      <div class="gripper-svg-wrap" id="gripperWrap">
+        <svg viewBox="0 0 200 140" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- 基座 -->
+          <rect x="70" y="0" width="60" height="30" rx="4" fill="#c8c8cc"/>
+          <rect x="85" y="30" width="30" height="16" rx="2" fill="#aeaeb2"/>
+          <!-- 左夹指 -->
+          <g class="jaw jaw-left" id="jawLeft">
+            <rect x="60" y="46" width="36" height="14" rx="2" fill="#8e8e93"/>
+            <rect x="60" y="60" width="12" height="60" rx="3" fill="#636366"/>
+            <rect x="56" y="112" width="20" height="10" rx="2" fill="#48484a"/>
+          </g>
+          <!-- 右夹指 -->
+          <g class="jaw jaw-right" id="jawRight">
+            <rect x="104" y="46" width="36" height="14" rx="2" fill="#8e8e93"/>
+            <rect x="128" y="60" width="12" height="60" rx="3" fill="#636366"/>
+            <rect x="124" y="112" width="20" height="10" rx="2" fill="#48484a"/>
+          </g>
+          <!-- 距离标注线 -->
+          <line id="dimLineL" x1="72" y1="132" x2="72" y2="126" stroke="#ababab" stroke-width="1"/>
+          <line id="dimLineR" x1="128" y1="132" x2="128" y2="126" stroke="#ababab" stroke-width="1"/>
+          <line id="dimLineH" x1="72" y1="130" x2="128" y2="130" stroke="#ababab" stroke-width="1" stroke-dasharray="3,2"/>
+        </svg>
+      </div>
+      <div class="gripper-distance" id="distDisplay">
+        -- <span>mm</span>
+      </div>
+    </div>
+
+    <div class="ctrl-row">
+      <button class="ctrl-btn open" id="btnOpen" onclick="gripperOpen()" disabled>
+        &#9664; 张开
+      </button>
+      <button class="ctrl-btn stop" id="btnStop" onclick="gripperStop()" disabled>
+        &#9632; 急停
+      </button>
+      <button class="ctrl-btn close" id="btnClose" onclick="gripperClose()" disabled>
+        闭合 &#9654;
+      </button>
+    </div>
+
+    <!-- 力反馈 & 位置 -->
+    <div class="meter-row">
+      <div class="meter">
+        <span class="meter-label">位置</span>
+        <span class="meter-value" id="posValue">--%</span>
+        <div class="meter-bar-wrap">
+          <div class="meter-bar" id="posBar" style="width: 0%"></div>
+        </div>
+      </div>
+      <div class="meter">
+        <span class="meter-label">力度</span>
+        <span class="meter-value" id="forceValue">--</span>
+        <div class="meter-bar-wrap">
+          <div class="meter-bar force" id="forceBar" style="width: 0%"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 滑块 -->
+    <div class="slider-group">
+      <div class="slider-header">
+        <span class="slider-label">目标位置</span>
+        <span class="slider-val" id="sliderVal">50%</span>
+      </div>
+      <input type="range" id="posSlider" min="0" max="100" value="50" disabled
+        oninput="document.getElementById('sliderVal').textContent=this.value+'%'">
+    </div>
+    <div class="slider-group">
+      <div class="slider-header">
+        <span class="slider-label">速度</span>
+        <span class="slider-val" id="speedVal">50%</span>
+      </div>
+      <input type="range" id="speedSlider" min="0" max="100" value="50" disabled
+        oninput="document.getElementById('speedVal').textContent=this.value+'%'">
+    </div>
+    <div class="slider-group">
+      <div class="slider-header">
+        <span class="slider-label">力度限制</span>
+        <span class="slider-val" id="forceSetVal">50%</span>
+      </div>
+      <input type="range" id="forceSlider" min="0" max="100" value="50" disabled
+        oninput="document.getElementById('forceSetVal').textContent=this.value+'%'">
+    </div>
+  </div>
+
+  <!-- ===== 协议探测 ===== -->
+  <div class="card">
+    <div class="card-title">协议探测</div>
+    <div class="probe-btns">
+      <button class="probe-btn" id="btnScanBaud" onclick="scanBaudRates()" disabled>扫描波特率</button>
+      <button class="probe-btn" id="btnModbus" onclick="probeModbus()" disabled>Modbus 探测</button>
+      <button class="probe-btn" id="btnLoopback" onclick="loopbackTest()" disabled>回环自测</button>
+    </div>
+
+    <div class="send-mode">
+      <button class="mode-btn active" id="modeText" onclick="setSendMode('text')">文本</button>
+      <button class="mode-btn" id="modeHex" onclick="setSendMode('hex')">HEX</button>
+    </div>
+    <div class="send-row">
+      <input class="send-input" id="sendInput" placeholder="输入指令..." onkeydown="if(event.key==='Enter')sendCmd()">
+      <button class="send-btn" id="btnSend" onclick="sendCmd()" disabled>发送</button>
+    </div>
+
+    <!-- Log -->
+    <div class="log-wrap" style="margin-top: 16px;">
+      <div class="log" id="log"></div>
+      <div class="log-actions">
+        <button class="log-action-btn" onclick="exportLog()">导出日志</button>
+        <button class="log-action-btn" onclick="clearLog()">清空</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 接线速查 ===== -->
+  <div class="card">
+    <div class="toggle-header" onclick="toggleWiring()">
+      <div class="card-title" style="margin-bottom:0">接线速查</div>
+      <span class="toggle-icon" id="wiringIcon">+</span>
+    </div>
+    <div class="toggle-content" id="wiringContent">
+      <table class="wiring-table" style="margin-top:12px">
+        <tr><td>USB转RS485 A+</td><td class="arrow">&rarr;</td><td>控制器 T</td></tr>
+        <tr><td>USB转RS485 B-</td><td class="arrow">&rarr;</td><td>控制器 R</td></tr>
+        <tr><td>USB转RS485 GND</td><td class="arrow">&rarr;</td><td>控制器 G</td></tr>
+        <tr><td>24V 电源 +V</td><td class="arrow">&rarr;</td><td>控制器 24V</td></tr>
+        <tr><td>24V 电源 -V</td><td class="arrow">&rarr;</td><td>控制器 COM-</td></tr>
+      </table>
+      <p style="font-size:12px;color:var(--text3);margin-top:10px;line-height:1.6">
+        T/R 接反不会烧东西，如果收不到数据就对调试试。<br>
+        回环自测：把适配器 A+ 和 B- 短接，点"回环自测"按钮。
+      </p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ===== State ===== */
+let port = null, reader = null, writer = null;
+let connected = false;
+let sendMode = 'text';      // 'text' | 'hex'
+let logEntries = [];         // {time, dir, text}
+let readBuffer = [];         // raw bytes buffer
+let jawPosition = 50;        // 0=closed, 100=open
+
+/* ===== Connection ===== */
+async function toggleConnection() {
+  if (connected) {
+    await disconnect();
+  } else {
+    await doConnect();
+  }
+}
+
+async function doConnect() {
+  if (!('serial' in navigator)) {
+    addLog('error', '当前浏览器不支持 Web Serial API，请使用 Chrome 或 Edge');
+    return;
+  }
+  try {
+    port = await navigator.serial.requestPort();
+    const baud = parseInt(document.getElementById('baudSelect').value);
+    await port.open({ baudRate: baud });
+
+    const enc = new TextEncoderStream();
+    enc.readable.pipeTo(port.writable);
+    writer = enc.writable.getWriter();
+
+    connected = true;
+    updateUI();
+    addLog('info', `已连接，波特率 ${baud}`);
+    readLoop();
+  } catch (e) {
+    addLog('error', '连接失败: ' + e.message);
+  }
+}
+
+async function disconnect() {
+  try {
+    if (reader) { await reader.cancel(); reader = null; }
+    if (writer) { writer.releaseLock(); writer = null; }
+    if (port) { await port.close(); port = null; }
+  } catch (e) { /* ignore */ }
+  connected = false;
+  updateUI();
+  addLog('info', '已断开');
+}
+
+async function reconnect(baud) {
+  try {
+    if (reader) { await reader.cancel(); reader = null; }
+    if (writer) { writer.releaseLock(); writer = null; }
+    if (port) { await port.close(); }
+    await port.open({ baudRate: baud });
+    const enc = new TextEncoderStream();
+    enc.readable.pipeTo(port.writable);
+    writer = enc.writable.getWriter();
+    readLoop();
+  } catch (e) {
+    addLog('error', '重连失败: ' + e.message);
+    throw e;
+  }
+}
+
+async function readLoop() {
+  const dec = new TextDecoderStream();
+  port.readable.pipeTo(dec.writable);
+  reader = dec.readable.getReader();
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (value) {
+        const bytes = Array.from(new TextEncoder().encode(value));
+        readBuffer.push(...bytes);
+        const hex = bytes.map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+        const ascii = value.replace(/[^\x20-\x7e]/g, c => `[0x${c.charCodeAt(0).toString(16).toUpperCase().padStart(2,'0')}]`);
+        addLog('rx', ascii);
+        addLog('rx', 'HEX: ' + hex);
+      }
+    }
+  } catch (e) {
+    if (connected) addLog('info', '读取中断');
+  }
+}
+
+/* ===== Send ===== */
+async function sendRaw(bytes) {
+  if (!connected || !port) return;
+  try {
+    const w = port.writable.getWriter();
+    await w.write(new Uint8Array(bytes));
+    w.releaseLock();
+    return true;
+  } catch (e) {
+    addLog('error', '发送失败: ' + e.message);
+    return false;
+  }
+}
+
+async function sendText(text) {
+  if (!connected || !writer) return;
+  try {
+    await writer.write(text + '\r\n');
+    addLog('tx', '文本: ' + text);
+  } catch (e) {
+    addLog('error', '发送失败: ' + e.message);
+  }
+}
+
+async function sendHex(hexStr) {
+  hexStr = hexStr.replace(/\s+/g, '');
+  if (hexStr.length % 2 !== 0 || !/^[0-9a-fA-F]+$/.test(hexStr)) {
+    addLog('error', 'HEX 格式错误，示例: 01 06 01 00 00 01');
+    return;
+  }
+  const bytes = [];
+  for (let i = 0; i < hexStr.length; i += 2) {
+    bytes.push(parseInt(hexStr.substr(i, 2), 16));
+  }
+  const display = bytes.map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+  addLog('tx', 'HEX: ' + display);
+  await sendRaw(bytes);
+}
+
+function sendCmd() {
+  const input = document.getElementById('sendInput');
+  const val = input.value.trim();
+  if (!val) return;
+  if (sendMode === 'hex') {
+    sendHex(val);
+  } else {
+    sendText(val);
+  }
+  input.value = '';
+  input.focus();
+}
+
+/* ===== Gripper Controls ===== */
+function gripperOpen() {
+  addLog('info', '发送张开指令（待绑定实际协议指令）');
+  // 占位——找到协议后替换为真实指令
+  // sendHex('...');
+  setJawPosition(100);
+}
+
+function gripperClose() {
+  addLog('info', '发送闭合指令（待绑定实际协议指令）');
+  // sendHex('...');
+  setJawPosition(0);
+}
+
+function gripperStop() {
+  addLog('info', '发送急停指令（待绑定实际协议指令）');
+  // sendHex('...');
+}
+
+function setJawPosition(pct) {
+  jawPosition = Math.max(0, Math.min(100, pct));
+  const maxOffset = 28;
+  const offset = (jawPosition / 100) * maxOffset;
+  document.getElementById('jawLeft').style.transform = `translateX(${-offset}px)`;
+  document.getElementById('jawRight').style.transform = `translateX(${offset}px)`;
+
+  // 更新距离标注线
+  const centerL = 72 - offset;
+  const centerR = 128 + offset;
+  document.getElementById('dimLineL').setAttribute('x1', centerL);
+  document.getElementById('dimLineL').setAttribute('x2', centerL);
+  document.getElementById('dimLineR').setAttribute('x1', centerR);
+  document.getElementById('dimLineR').setAttribute('x2', centerR);
+  document.getElementById('dimLineH').setAttribute('x1', centerL);
+  document.getElementById('dimLineH').setAttribute('x2', centerR);
+
+  document.getElementById('posValue').textContent = jawPosition + '%';
+  document.getElementById('posBar').style.width = jawPosition + '%';
+}
+
+/* ===== Probe: Baud Scan ===== */
+async function scanBaudRates() {
+  if (!connected) return;
+  const bauds = [9600, 19200, 38400, 57600, 115200];
+  const btn = document.getElementById('btnScanBaud');
+  btn.disabled = true;
+  btn.textContent = '扫描中...';
+
+  addLog('info', '=== 开始扫描波特率 ===');
+
+  for (const baud of bauds) {
+    addLog('info', `尝试 ${baud} ...`);
+
+    try {
+      // 断开当前读取
+      if (reader) { await reader.cancel(); reader = null; }
+      if (writer) { writer.releaseLock(); writer = null; }
+      await port.close();
+      await port.open({ baudRate: baud });
+
+      // 短暂读取
+      const dec = new TextDecoderStream();
+      port.readable.pipeTo(dec.writable);
+      const tmpReader = dec.readable.getReader();
+
+      // 发探测
+      const enc = new TextEncoderStream();
+      enc.readable.pipeTo(port.writable);
+      const tmpWriter = enc.writable.getWriter();
+      await tmpWriter.write('?\r\n');
+      tmpWriter.releaseLock();
+
+      // 等 2 秒看回复
+      let gotData = false;
+      const timeout = new Promise(r => setTimeout(r, 2000));
+      const readOnce = async () => {
+        try {
+          const { value, done } = await tmpReader.read();
+          if (value && value.length > 0) {
+            gotData = true;
+            const bytes = Array.from(new TextEncoder().encode(value));
+            const hex = bytes.map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+            addLog('rx', `${baud}: ${value.replace(/[^\x20-\x7e]/g, '.')} (HEX: ${hex})`);
+          }
+        } catch(e) {}
+      };
+      await Promise.race([readOnce(), timeout]);
+      await tmpReader.cancel();
+
+      if (gotData) {
+        addLog('info', `>>> ${baud} 波特率收到数据！`);
+      } else {
+        addLog('info', `${baud}: 无回复`);
+      }
+    } catch (e) {
+      addLog('error', `${baud}: 错误 ${e.message}`);
+    }
+  }
+
+  // 恢复连接
+  const currentBaud = parseInt(document.getElementById('baudSelect').value);
+  try {
+    await port.open({ baudRate: currentBaud });
+    const enc = new TextEncoderStream();
+    enc.readable.pipeTo(port.writable);
+    writer = enc.writable.getWriter();
+    readLoop();
+  } catch(e) {
+    addLog('error', '恢复连接失败: ' + e.message);
+  }
+
+  addLog('info', '=== 扫描完成 ===');
+  btn.disabled = false;
+  btn.textContent = '扫描波特率';
+}
+
+/* ===== Probe: Modbus ===== */
+async function probeModbus() {
+  if (!connected) return;
+  const btn = document.getElementById('btnModbus');
+  btn.disabled = true;
+  btn.textContent = '探测中...';
+
+  addLog('info', '=== Modbus RTU 探测 ===');
+
+  const frames = [
+    { hex: [0x01,0x03,0x00,0x00,0x00,0x01,0x84,0x0A], desc: '读寄存器 0x0000 (地址=1)' },
+    { hex: [0x01,0x03,0x01,0x00,0x00,0x01,0x85,0xF6], desc: '读寄存器 0x0100 (地址=1)' },
+    { hex: [0x01,0x06,0x01,0x00,0x00,0x01,0x49,0xF6], desc: '写寄存器 0x0100=1 (地址=1)' },
+    { hex: [0x00,0x03,0x00,0x00,0x00,0x01,0x85,0xDB], desc: '读寄存器 0x0000 (广播=0)' },
+  ];
+
+  readBuffer = [];
+
+  for (const frame of frames) {
+    const display = frame.hex.map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+    addLog('tx', `${display}  (${frame.desc})`);
+    readBuffer = [];
+    await sendRaw(frame.hex);
+
+    // 等 800ms
+    await new Promise(r => setTimeout(r, 800));
+
+    if (readBuffer.length > 0) {
+      addLog('info', `>>> 有回复！该指令有效`);
+    } else {
+      addLog('info', '无回复');
+    }
+  }
+
+  addLog('info', '=== Modbus 探测完成 ===');
+  addLog('info', '如果某条有回复，说明夹爪使用 Modbus RTU 协议');
+  btn.disabled = false;
+  btn.textContent = 'Modbus 探测';
+}
+
+/* ===== Probe: Loopback ===== */
+async function loopbackTest() {
+  addLog('info', '=== 回环自测 ===');
+  addLog('info', '请先把 RS485 适配器的 A+ 和 B- 短接（用一根杜邦线或金属丝连起来）');
+  addLog('info', '发送测试数据...');
+
+  const testData = [0x48, 0x45, 0x4C, 0x4C, 0x4F]; // "HELLO"
+  readBuffer = [];
+  await sendRaw(testData);
+  addLog('tx', 'HEX: 48 45 4C 4C 4F (HELLO)');
+
+  await new Promise(r => setTimeout(r, 500));
+
+  if (readBuffer.length >= 5) {
+    addLog('info', '>>> 回环成功！适配器工作正常');
+  } else if (readBuffer.length > 0) {
+    addLog('info', `回环部分成功，收到 ${readBuffer.length} 字节`);
+  } else {
+    addLog('error', '回环失败：没收到数据。请检查 A+/B- 是否短接');
+  }
+  addLog('info', '测试完后记得断开短接线，重新接回夹爪');
+}
+
+/* ===== Send Mode ===== */
+function setSendMode(mode) {
+  sendMode = mode;
+  document.getElementById('modeText').classList.toggle('active', mode === 'text');
+  document.getElementById('modeHex').classList.toggle('active', mode === 'hex');
+  document.getElementById('sendInput').placeholder =
+    mode === 'hex' ? '输入十六进制，如 01 06 01 00...' : '输入文本指令...';
+}
+
+/* ===== Log ===== */
+function addLog(type, text) {
+  const now = new Date();
+  const time = now.toTimeString().split(' ')[0];
+  const prefix = { tx: '↗ ', rx: '↙ ', info: '  ', error: '⚠ ' }[type] || '  ';
+  const entry = { time, type, text: prefix + text };
+  logEntries.push(entry);
+
+  const el = document.getElementById('log');
+  const div = document.createElement('div');
+  div.className = 'log-entry ' + type;
+  div.textContent = `${time}  ${entry.text}`;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+
+function clearLog() {
+  logEntries = [];
+  document.getElementById('log').innerHTML = '';
+}
+
+function exportLog() {
+  if (logEntries.length === 0) {
+    addLog('info', '日志为空，没有可导出的内容');
+    return;
+  }
+  const text = logEntries.map(e => `${e.time}  [${e.type.toUpperCase()}]  ${e.text}`).join('\n');
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `gripper-log-${new Date().toISOString().slice(0,10)}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+  addLog('info', '日志已导出');
+}
+
+/* ===== Wiring Toggle ===== */
+function toggleWiring() {
+  const content = document.getElementById('wiringContent');
+  const icon = document.getElementById('wiringIcon');
+  const isOpen = content.classList.toggle('open');
+  icon.textContent = isOpen ? '−' : '+';
+}
+
+/* ===== UI Update ===== */
+function updateUI() {
+  const btn = document.getElementById('connBtn');
+  const dot = document.getElementById('statusDot');
+  const txt = document.getElementById('statusText');
+  const baud = document.getElementById('baudSelect');
+
+  if (connected) {
+    btn.textContent = '断开连接';
+    btn.classList.add('connected');
+    dot.classList.add('on');
+    txt.textContent = `已连接 · ${baud.value} baud`;
+  } else {
+    btn.textContent = '连接 RS485';
+    btn.classList.remove('connected');
+    dot.classList.remove('on');
+    txt.textContent = '未连接';
+  }
+
+  document.querySelectorAll('.ctrl-btn, .probe-btn, .send-btn, #posSlider, #speedSlider, #forceSlider')
+    .forEach(el => el.disabled = !connected);
+}
+
+/* ===== Init ===== */
+setJawPosition(50);
+</script>
+
+</body>
+</html>

@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>回零测试</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #1a1a2e;
+    color: #eee;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  h1 { font-size: 22px; margin-bottom: 12px; color: #a0a0ff; }
+
+  .top-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; justify-content: center; }
+  .status { font-size: 13px; padding: 5px 14px; border-radius: 20px; }
+  .status.disconnected { background: #442222; color: #ff6666; }
+  .status.connected { background: #224422; color: #66ff66; }
+  .connect-btn {
+    border: none; border-radius: 8px; padding: 8px 20px;
+    background: linear-gradient(135deg, #6c5ce7, #5a4bd1);
+    font-size: 14px; font-weight: 600; color: white; cursor: pointer;
+  }
+  .connect-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* 进度条 */
+  .progress {
+    width: 100%; max-width: 460px;
+    margin-bottom: 18px;
+    background: #16213e;
+    border-radius: 10px;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .progress-label { font-size: 13px; color: #888; white-space: nowrap; }
+  .progress-bar {
+    flex: 1; height: 8px;
+    background: #2a2a3e;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, #00d2ff, #00ff88);
+    border-radius: 4px;
+    transition: width 0.4s ease;
+  }
+  .progress-count { font-size: 14px; font-weight: 700; color: #00ff88; min-width: 32px; text-align: right; }
+  .progress.done { background: #1a3a2a; }
+  .progress.done .progress-label { color: #00ff88; }
+
+  /* 成功弹窗 */
+  .success-banner {
+    display: none;
+    width: 100%; max-width: 460px;
+    background: linear-gradient(135deg, #1a3a2a, #224422);
+    border: 1px solid #00ff88;
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+    margin-bottom: 14px;
+  }
+  .success-banner.show { display: block; }
+  .success-banner h2 { color: #00ff88; font-size: 20px; margin-bottom: 4px; }
+  .success-banner p { color: #88cc88; font-size: 13px; }
+
+  /* 轴卡片 */
+  .axes { display: flex; flex-direction: column; gap: 14px; width: 100%; max-width: 460px; }
+  .axis-card {
+    background: #16213e;
+    border-radius: 14px;
+    padding: 16px;
+    border-left: 4px solid;
+  }
+  .axis-card.x { border-color: #ff6b6b; }
+  .axis-card.y { border-color: #4ecdc4; }
+  .axis-card.z { border-color: #ffe66d; }
+
+  .axis-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .axis-name { font-size: 18px; font-weight: 700; }
+  .x .axis-name { color: #ff6b6b; }
+  .y .axis-name { color: #4ecdc4; }
+  .z .axis-name { color: #ffe66d; }
+  .axis-status { font-size: 12px; padding: 3px 10px; border-radius: 12px; background: #2a2a3e; color: #888; }
+  .axis-status.homing { background: #3a3a1e; color: #ffe66d; }
+  .axis-status.homed { background: #1a3a2a; color: #00ff88; }
+  .axis-status.error { background: #3a1a1a; color: #ff6666; }
+
+  /* 传感器轨道 */
+  .sensor-track {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    position: relative;
+    padding: 0 10px;
+    margin-bottom: 14px;
+  }
+  .sensor-track::before {
+    content: '';
+    position: absolute;
+    left: 36px; right: 36px;
+    top: 15px;
+    height: 2px;
+    background: #333;
+  }
+
+  .sensor {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    z-index: 1;
+  }
+  .sensor-dot {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    background: #2a2a3e;
+    border: 2.5px solid #444;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    color: transparent;
+  }
+  .sensor.active .sensor-dot {
+    background: #00ff88;
+    border-color: #00ff88;
+    box-shadow: 0 0 18px rgba(0, 255, 136, 0.5);
+  }
+  .sensor.home-target .sensor-dot {
+    border-color: #ffe66d;
+    border-style: dashed;
+  }
+  .sensor-label { font-size: 11px; color: #777; }
+
+  /* 滑块位置指示 */
+  .slider-indicator {
+    position: absolute;
+    top: 10px;
+    width: 12px; height: 12px;
+    background: #ff6b6b;
+    border-radius: 2px;
+    transform: rotate(45deg);
+    transition: left 0.1s ease;
+    display: none;
+  }
+
+  /* 控制按钮 */
+  .controls-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: center;
+  }
+  button { border: none; color: white; cursor: pointer; font-weight: 600; border-radius: 10px; }
+  button:active { transform: scale(0.95); }
+  button:disabled { opacity: 0.3; cursor: not-allowed; transform: none; }
+
+  .btn-home {
+    flex: 1; height: 44px; font-size: 14px;
+    background: linear-gradient(135deg, #6c5ce7, #5a4bd1);
+    max-width: 160px;
+  }
+  .btn-home.running {
+    background: linear-gradient(135deg, #e8a838, #d49320);
+    animation: pulse 1s infinite;
+  }
+  .btn-home.done {
+    background: linear-gradient(135deg, #27ae60, #1e8449);
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+
+  .btn-move { width: 56px; height: 44px; font-size: 16px; }
+  .x .btn-back { background: linear-gradient(135deg, #c0392b, #a93226); }
+  .x .btn-fwd { background: linear-gradient(135deg, #e74c3c, #c0392b); }
+  .y .btn-back { background: linear-gradient(135deg, #16a085, #138d75); }
+  .y .btn-fwd { background: linear-gradient(135deg, #1abc9c, #16a085); }
+  .z .btn-back { background: linear-gradient(135deg, #d4a017, #b8860b); }
+  .z .btn-fwd { background: linear-gradient(135deg, #f0c040, #d4a017); }
+
+  .btn-stop-axis {
+    width: 44px; height: 44px; font-size: 11px; border-radius: 50%;
+    background: linear-gradient(135deg, #e8a838, #d49320);
+  }
+
+  /* 底部控制 */
+  .global-controls {
+    width: 100%; max-width: 460px;
+    margin-top: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .home-all-row {
+    display: flex; gap: 10px;
+  }
+  .btn-home-all {
+    flex: 1; padding: 12px; font-size: 15px;
+    background: linear-gradient(135deg, #6c5ce7, #5a4bd1);
+    border-radius: 10px;
+  }
+  .btn-home-all.running {
+    background: linear-gradient(135deg, #e8a838, #d49320);
+    animation: pulse 1s infinite;
+  }
+
+  .speed-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: center;
+  }
+  .speed-label { font-size: 12px; color: #888; }
+  .speed-dots { display: flex; gap: 4px; }
+  .speed-dot {
+    width: 28px; height: 28px; border-radius: 7px; font-size: 12px;
+    background: #222; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: #888; border: none;
+  }
+  .speed-dot.active { background: #4a90d9; color: white; }
+
+  .stop-all-btn {
+    width: 100%; padding: 14px;
+    font-size: 16px;
+    background: linear-gradient(135deg, #c0392b, #96281b);
+    border-radius: 10px;
+  }
+
+  .reset-btn {
+    width: 100%; padding: 10px;
+    font-size: 13px;
+    background: #333;
+    border-radius: 10px;
+    color: #888;
+  }
+
+  /* 日志 */
+  .log {
+    margin-top: 12px;
+    width: 100%; max-width: 460px; height: 100px;
+    background: #111; border-radius: 10px; padding: 8px;
+    font-family: monospace; font-size: 11px; color: #66ff66; overflow-y: auto;
+  }
+  .hint {
+    margin-top: 8px; font-size: 11px; color: #444; text-align: center; line-height: 1.8;
+  }
+
+  /* 安全提醒 */
+  .safety-note {
+    width: 100%; max-width: 460px;
+    margin-bottom: 14px;
+    background: #2a2218;
+    border: 1px solid #665522;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: #ddaa44;
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+
+<h1>回零测试</h1>
+<div class="top-bar">
+  <div id="status" class="status disconnected">未连接</div>
+  <button id="connectBtn" class="connect-btn" onclick="connect()">连接 Arduino</button>
+</div>
+
+<div class="safety-note">
+  <strong>安全提醒：</strong>回零时滑块会自动移动，手不要伸进龙门架行程范围内。
+  如果方向不对，立刻点"全部急停"。Z轴回零前请先完成刹车接线！
+</div>
+
+<div id="successBanner" class="success-banner">
+  <h2>全部回零完成!</h2>
+  <p>三轴都已找到原点位置</p>
+</div>
+
+<div class="progress" id="progressBox">
+  <span class="progress-label">回零进度</span>
+  <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+  <span class="progress-count" id="progressCount">0/3</span>
+</div>
+
+<div class="axes">
+  <!-- X轴 -->
+  <div class="axis-card x" id="axisX">
+    <div class="axis-header">
+      <span class="axis-name">X 轴</span>
+      <span class="axis-status" id="statusX">待回零</span>
+    </div>
+    <div class="sensor-track">
+      <div class="sensor" id="s0"><div class="sensor-dot"></div><div class="sensor-label">负限位</div></div>
+      <div class="sensor home-target" id="s1"><div class="sensor-dot"></div><div class="sensor-label">原点</div></div>
+      <div class="sensor" id="s2"><div class="sensor-dot"></div><div class="sensor-label">正限位</div></div>
+    </div>
+    <div class="controls-row">
+      <button class="btn-move btn-back" onmousedown="startMove('X','B')" onmouseup="stopMove('X')" onmouseleave="stopMove('X')" disabled>&larr;</button>
+      <button class="btn-stop-axis" onclick="stopAxis('X')" disabled>停止</button>
+      <button class="btn-home" id="homeX" onclick="homeAxis('X')" disabled>回零 X</button>
+      <button class="btn-stop-axis" onclick="stopAxis('X')" disabled>停止</button>
+      <button class="btn-move btn-fwd" onmousedown="startMove('X','F')" onmouseup="stopMove('X')" onmouseleave="stopMove('X')" disabled>&rarr;</button>
+    </div>
+  </div>
+
+  <!-- Y轴 -->
+  <div class="axis-card y" id="axisY">
+    <div class="axis-header">
+      <span class="axis-name">Y 轴</span>
+      <span class="axis-status" id="statusY">待回零</span>
+    </div>
+    <div class="sensor-track">
+      <div class="sensor" id="s3"><div class="sensor-dot"></div><div class="sensor-label">负限位</div></div>
+      <div class="sensor home-target" id="s4"><div class="sensor-dot"></div><div class="sensor-label">原点</div></div>
+      <div class="sensor" id="s5"><div class="sensor-dot"></div><div class="sensor-label">正限位</div></div>
+    </div>
+    <div class="controls-row">
+      <button class="btn-move btn-back" onmousedown="startMove('Y','B')" onmouseup="stopMove('Y')" onmouseleave="stopMove('Y')" disabled>&larr;</button>
+      <button class="btn-stop-axis" onclick="stopAxis('Y')" disabled>停止</button>
+      <button class="btn-home" id="homeY" onclick="homeAxis('Y')" disabled>回零 Y</button>
+      <button class="btn-stop-axis" onclick="stopAxis('Y')" disabled>停止</button>
+      <button class="btn-move btn-fwd" onmousedown="startMove('Y','F')" onmouseup="stopMove('Y')" onmouseleave="stopMove('Y')" disabled>&rarr;</button>
+    </div>
+  </div>
+
+  <!-- Z轴 -->
+  <div class="axis-card z" id="axisZ">
+    <div class="axis-header">
+      <span class="axis-name">Z 轴</span>
+      <span class="axis-status" id="statusZ">待回零</span>
+    </div>
+    <div class="sensor-track">
+      <div class="sensor" id="s6"><div class="sensor-dot"></div><div class="sensor-label">负限位</div></div>
+      <div class="sensor home-target" id="s7"><div class="sensor-dot"></div><div class="sensor-label">原点</div></div>
+      <div class="sensor" id="s8"><div class="sensor-dot"></div><div class="sensor-label">正限位</div></div>
+    </div>
+    <div class="controls-row">
+      <button class="btn-move btn-back" onmousedown="startMove('Z','B')" onmouseup="stopMove('Z')" onmouseleave="stopMove('Z')" disabled>&uarr;</button>
+      <button class="btn-stop-axis" onclick="stopAxis('Z')" disabled>停止</button>
+      <button class="btn-home" id="homeZ" onclick="homeAxis('Z')" disabled>回零 Z</button>
+      <button class="btn-stop-axis" onclick="stopAxis('Z')" disabled>停止</button>
+      <button class="btn-move btn-fwd" onmousedown="startMove('Z','F')" onmouseup="stopMove('Z')" onmouseleave="stopMove('Z')" disabled>&darr;</button>
+    </div>
+  </div>
+</div>
+
+<div class="global-controls">
+  <div class="speed-row">
+    <span class="speed-label">回零速度</span>
+    <div class="speed-dots" id="speedDots"></div>
+  </div>
+  <button class="btn-home-all" id="homeAllBtn" onclick="homeAll()" disabled>全部回零 (X → Y → Z)</button>
+  <button class="stop-all-btn" onclick="emergencyStop()" disabled>全部急停</button>
+  <button class="reset-btn" onclick="resetAll()" disabled>重置</button>
+</div>
+
+<div class="log" id="log"></div>
+<div class="hint">
+  手动微调: 长按方向键移动 | 回零: 自动寻找原点传感器<br>
+  键盘: A/D=X轴 | 左/右=Y轴 | W/S=Z轴 | 空格=全部急停<br>
+  回零方向: 向负方向找原点，触碰负限位会自动反弹
+</div>
+
+<script>
+let port, reader, writer;
+let connected = false;
+let currentSpeed = 2; // 回零用慢速
+const holdTimers = {};
+const isHolding = {};
+const sensorData = '000000000';
+
+// 传感器索引映射
+const AXES = {
+  X: { negLimit: 0, home: 1, posLimit: 2, homingDir: 'L', reverseDir: 'R' },
+  Y: { negLimit: 3, home: 4, posLimit: 5, homingDir: 'L', reverseDir: 'R' },
+  Z: { negLimit: 6, home: 7, posLimit: 8, homingDir: 'L', reverseDir: 'R' }
+};
+
+// 回零状态
+const homingState = {
+  X: { active: false, homed: false, phase: 'idle' },
+  Y: { active: false, homed: false, phase: 'idle' },
+  Z: { active: false, homed: false, phase: 'idle' }
+};
+let homeAllRunning = false;
+let latestSensorData = '000000000';
+
+// 初始化速度选择器
+const speedContainer = document.getElementById('speedDots');
+for (let i = 1; i <= 5; i++) {
+  const dot = document.createElement('button');
+  dot.className = 'speed-dot' + (i === 2 ? ' active' : '');
+  dot.textContent = i;
+  dot.onclick = () => setSpeed(i);
+  speedContainer.appendChild(dot);
+}
+
+function setSpeed(spd) {
+  if (!connected) return;
+  currentSpeed = spd;
+  ['X','Y','Z'].forEach(a => send(a + spd));
+  speedContainer.querySelectorAll('.speed-dot').forEach((d, idx) => {
+    d.classList.toggle('active', idx + 1 === spd);
+  });
+}
+
+// 触摸事件
+document.querySelectorAll('.btn-move').forEach(btn => {
+  btn.addEventListener('touchstart', e => { e.preventDefault(); btn.onmousedown?.(e); }, { passive: false });
+  btn.addEventListener('touchend', e => { btn.onmouseup?.(e); });
+  btn.addEventListener('touchcancel', e => { btn.onmouseleave?.(e); });
+});
+
+async function connect() {
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 115200 });
+    const enc = new TextEncoderStream();
+    enc.readable.pipeTo(port.writable);
+    writer = enc.writable.getWriter();
+    const dec = new TextDecoderStream();
+    port.readable.pipeTo(dec.writable);
+    reader = dec.readable.getReader();
+    connected = true;
+    document.getElementById('status').textContent = '已连接';
+    document.getElementById('status').className = 'status connected';
+    document.getElementById('connectBtn').disabled = true;
+    document.querySelectorAll('button:not(.connect-btn)').forEach(b => b.disabled = false);
+    log('已连接到 Arduino');
+    setTimeout(() => setSpeed(currentSpeed), 300);
+    readLoop();
+  } catch (e) { log('连接失败: ' + e.message); }
+}
+
+async function readLoop() {
+  let buffer = '';
+  while (true) {
+    try {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      buffer += value;
+      let idx;
+      while ((idx = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.substring(0, idx).trim();
+        buffer = buffer.substring(idx + 1);
+        if (line.startsWith('SENS:')) {
+          latestSensorData = line.substring(5);
+          updateSensors(latestSensorData);
+          processHoming(latestSensorData);
+        } else if (line) {
+          log('\u2190 ' + line);
+        }
+      }
+    } catch (e) { log('读取断开'); break; }
+  }
+}
+
+function updateSensors(data) {
+  if (data.length < 9) return;
+  for (let i = 0; i < 9; i++) {
+    const active = data[i] === '1';
+    const el = document.getElementById('s' + i);
+    el.classList.toggle('active', active);
+  }
+}
+
+// === 回零核心逻辑 ===
+
+function processHoming(data) {
+  if (data.length < 9) return;
+  for (const axis of ['X', 'Y', 'Z']) {
+    const st = homingState[axis];
+    if (!st.active) continue;
+    const cfg = AXES[axis];
+    const homeTriggered = data[cfg.home] === '1';
+    const negLimitTriggered = data[cfg.negLimit] === '1';
+    const posLimitTriggered = data[cfg.posLimit] === '1';
+
+    if (st.phase === 'seeking') {
+      if (homeTriggered) {
+        // 找到原点
+        send(axis + 'S');
+        st.active = false;
+        st.homed = true;
+        st.phase = 'done';
+        setAxisStatus(axis, 'homed', '已回零');
+        updateHomeBtn(axis, 'done');
+        log(axis + ' 轴找到原点，回零完成!');
+        updateProgress();
+        // 如果是全部回零模式，启动下一个轴
+        if (homeAllRunning) homeNextAxis();
+      } else if (negLimitTriggered) {
+        // 触碰负限位，反弹
+        send(axis + 'S');
+        st.phase = 'reversing';
+        setAxisStatus(axis, 'homing', '反弹中...');
+        log(axis + ' 轴触碰负限位，反方向退回...');
+        // 反方向走一小段
+        send(axis + cfg.reverseDir);
+        setTimeout(() => {
+          if (st.phase === 'reversing') {
+            send(axis + 'S');
+            // 短暂停顿后继续找原点
+            setTimeout(() => {
+              if (st.active && st.phase === 'reversing') {
+                st.phase = 'seeking';
+                setAxisStatus(axis, 'homing', '寻找原点...');
+                send(axis + cfg.homingDir);
+              }
+            }, 300);
+          }
+        }, 800);
+      } else if (posLimitTriggered) {
+        // 触碰正限位 → 方向可能反了
+        send(axis + 'S');
+        st.active = false;
+        st.phase = 'error';
+        setAxisStatus(axis, 'error', '方向错误!');
+        updateHomeBtn(axis, 'idle');
+        log(axis + ' 轴触碰正限位! 回零方向可能反了，请用方向键手动确认');
+        if (homeAllRunning) {
+          homeAllRunning = false;
+          document.getElementById('homeAllBtn').classList.remove('running');
+          document.getElementById('homeAllBtn').textContent = '全部回零 (X \u2192 Y \u2192 Z)';
+        }
+      }
+    }
+  }
+}
+
+function homeAxis(axis) {
+  const st = homingState[axis];
+  if (st.active) {
+    // 正在回零中，点击取消
+    send(axis + 'S');
+    st.active = false;
+    st.phase = 'idle';
+    setAxisStatus(axis, '', '已取消');
+    updateHomeBtn(axis, 'idle');
+    log(axis + ' 轴回零已取消');
+    return;
+  }
+  if (st.homed) {
+    // 已回零，再次点击重新回零
+    st.homed = false;
+    updateProgress();
+  }
+
+  // 检查原点传感器是否已经触发
+  const cfg = AXES[axis];
+  if (latestSensorData[cfg.home] === '1') {
+    st.homed = true;
+    st.phase = 'done';
+    setAxisStatus(axis, 'homed', '已在原点');
+    updateHomeBtn(axis, 'done');
+    log(axis + ' 轴已在原点位置，无需移动');
+    updateProgress();
+    if (homeAllRunning) homeNextAxis();
+    return;
+  }
+
+  // 开始回零
+  st.active = true;
+  st.phase = 'seeking';
+  setAxisStatus(axis, 'homing', '寻找原点...');
+  updateHomeBtn(axis, 'running');
+  log(axis + ' 轴开始回零（向负方向移动）...');
+  send(axis + cfg.homingDir);
+}
+
+function homeAll() {
+  if (homeAllRunning) {
+    // 取消全部回零
+    emergencyStop();
+    return;
+  }
+  homeAllRunning = true;
+  const btn = document.getElementById('homeAllBtn');
+  btn.classList.add('running');
+  btn.textContent = '点击取消全部回零';
+  log('--- 开始全部回零 ---');
+  // 从第一个未回零的轴开始
+  homeNextAxis();
+}
+
+function homeNextAxis() {
+  const order = ['X', 'Y', 'Z'];
+  for (const axis of order) {
+    if (!homingState[axis].homed) {
+      homeAxis(axis);
+      return;
+    }
+  }
+  // 全部完成
+  homeAllRunning = false;
+  const btn = document.getElementById('homeAllBtn');
+  btn.classList.remove('running');
+  btn.textContent = '全部回零 (X \u2192 Y \u2192 Z)';
+  log('--- 全部回零完成! ---');
+}
+
+function setAxisStatus(axis, cls, text) {
+  const el = document.getElementById('status' + axis);
+  el.className = 'axis-status' + (cls ? ' ' + cls : '');
+  el.textContent = text;
+}
+
+function updateHomeBtn(axis, state) {
+  const btn = document.getElementById('home' + axis);
+  btn.classList.remove('running', 'done');
+  if (state === 'running') {
+    btn.classList.add('running');
+    btn.textContent = '取消';
+  } else if (state === 'done') {
+    btn.classList.add('done');
+    btn.textContent = axis + ' 已回零';
+  } else {
+    btn.textContent = '回零 ' + axis;
+  }
+}
+
+function updateProgress() {
+  const count = ['X','Y','Z'].filter(a => homingState[a].homed).length;
+  document.getElementById('progressCount').textContent = count + '/3';
+  document.getElementById('progressFill').style.width = (count / 3 * 100) + '%';
+  if (count === 3) {
+    document.getElementById('progressBox').classList.add('done');
+    document.getElementById('successBanner').classList.add('show');
+  } else {
+    document.getElementById('progressBox').classList.remove('done');
+    document.getElementById('successBanner').classList.remove('show');
+  }
+}
+
+function stopAxis(axis) {
+  send(axis + 'S');
+  const st = homingState[axis];
+  if (st.active) {
+    st.active = false;
+    st.phase = 'idle';
+    setAxisStatus(axis, '', '已停止');
+    updateHomeBtn(axis, 'idle');
+  }
+}
+
+function emergencyStop() {
+  send('S');
+  for (const axis of ['X','Y','Z']) {
+    const st = homingState[axis];
+    if (st.active) {
+      st.active = false;
+      st.phase = 'idle';
+      setAxisStatus(axis, '', '急停');
+      updateHomeBtn(axis, 'idle');
+    }
+  }
+  if (homeAllRunning) {
+    homeAllRunning = false;
+    const btn = document.getElementById('homeAllBtn');
+    btn.classList.remove('running');
+    btn.textContent = '全部回零 (X \u2192 Y \u2192 Z)';
+  }
+  log('全部急停!');
+}
+
+function resetAll() {
+  emergencyStop();
+  for (const axis of ['X','Y','Z']) {
+    homingState[axis].homed = false;
+    homingState[axis].phase = 'idle';
+    setAxisStatus(axis, '', '待回零');
+    updateHomeBtn(axis, 'idle');
+  }
+  updateProgress();
+  log('已重置');
+}
+
+// === 手动移动 ===
+
+function startMove(axis, dir) {
+  if (!connected) return;
+  // 手动移动时取消该轴的回零
+  if (homingState[axis].active) {
+    homingState[axis].active = false;
+    homingState[axis].phase = 'idle';
+    setAxisStatus(axis, '', '手动');
+    updateHomeBtn(axis, 'idle');
+  }
+  isHolding[axis] = false;
+  send(axis + dir);
+  holdTimers[axis] = setTimeout(() => {
+    isHolding[axis] = true;
+    send(axis + (dir === 'F' ? 'R' : 'L'));
+  }, 400);
+}
+
+function stopMove(axis) {
+  if (holdTimers[axis]) { clearTimeout(holdTimers[axis]); holdTimers[axis] = null; }
+  if (isHolding[axis]) { send(axis + 'S'); isHolding[axis] = false; }
+}
+
+async function send(cmd) {
+  if (!connected || !writer) return;
+  try { await writer.write(cmd); log('\u2192 ' + cmd); }
+  catch (e) { log('发送失败: ' + e.message); }
+}
+
+function log(msg) {
+  const el = document.getElementById('log');
+  const time = new Date().toLocaleTimeString('zh', { hour12: false });
+  el.textContent += '[' + time + '] ' + msg + '\n';
+  el.scrollTop = el.scrollHeight;
+}
+
+// 键盘控制
+const keyMap = {
+  'd': ['X','F'], 'a': ['X','B'],
+  'ArrowRight': ['Y','F'], 'ArrowLeft': ['Y','B'],
+  'w': ['Z','F'], 's': ['Z','B']
+};
+let keyHeld = {};
+document.addEventListener('keydown', e => {
+  if (!connected || keyHeld[e.key]) return;
+  if (e.key === ' ') { e.preventDefault(); emergencyStop(); return; }
+  const m = keyMap[e.key];
+  if (m) { e.preventDefault(); keyHeld[e.key] = true; startMove(m[0], m[1]); }
+});
+document.addEventListener('keyup', e => {
+  const m = keyMap[e.key];
+  if (m) { keyHeld[e.key] = false; stopMove(m[0]); }
+});
+</script>
+
+</body>
+</html>

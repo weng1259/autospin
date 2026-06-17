@@ -1,0 +1,27 @@
+# Phase 3.2 整体验收配置（ADR-004 §测试标准 + migration-checklist "骨干路径"）
+#
+# "骨干" = API 合同 + 错误 + 幂等 + dry-run + 并发不阻塞。硬件串口协议实现
+# 层（DSTUR USB 继电器 / grbl pyserial 低层胶水）通过 Phase 3.1 Slice 1-5 +
+# Phase 3.2 Agent smoke 的**真硬件**验收覆盖，不算骨干 unit test 范畴。
+#
+# architecture-roadmap.md §明确不做的事 已明说："不写 unit test 到 100%
+# 覆盖率——有 verify_slice*_*.py 这种'真硬件数据层验收脚本' + PM 亲自点
+# 聊天/按钮的'纵向 Slice 验收'就够了"。
+
+[run]
+source = src
+branch = False
+
+[report]
+# Phase 3.3 起 `dstur_relay.py` 已删除，`relay_backend.py` 取代。
+# 新的 RelayBackend 骨干已有单元测试（tests/test_relay_backend.py），
+# 不需要 omit。
+omit =
+
+# 行级排除 —— 跨文件通用 pattern + 串口 IO 胶水标记
+exclude_lines =
+    pragma: no cover
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    # 线程 daemon 循环的默认分支兜底（从不走到）
+    if TYPE_CHECKING:

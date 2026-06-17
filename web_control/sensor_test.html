@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>传感器测试</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #1a1a2e;
+    color: #eee;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  h1 { font-size: 22px; margin-bottom: 12px; color: #a0a0ff; }
+
+  .top-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; justify-content: center; }
+  .status { font-size: 13px; padding: 5px 14px; border-radius: 20px; }
+  .status.disconnected { background: #442222; color: #ff6666; }
+  .status.connected { background: #224422; color: #66ff66; }
+  .connect-btn {
+    border: none; border-radius: 8px; padding: 8px 20px;
+    background: linear-gradient(135deg, #6c5ce7, #5a4bd1);
+    font-size: 14px; font-weight: 600; color: white; cursor: pointer;
+  }
+  .connect-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* 进度条 */
+  .progress {
+    width: 100%; max-width: 460px;
+    margin-bottom: 18px;
+    background: #16213e;
+    border-radius: 10px;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .progress-label { font-size: 13px; color: #888; white-space: nowrap; }
+  .progress-bar {
+    flex: 1; height: 8px;
+    background: #2a2a3e;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, #00d2ff, #00ff88);
+    border-radius: 4px;
+    transition: width 0.4s ease;
+  }
+  .progress-count { font-size: 14px; font-weight: 700; color: #00ff88; min-width: 32px; text-align: right; }
+  .progress.done { background: #1a3a2a; }
+  .progress.done .progress-label { color: #00ff88; }
+
+  /* 轴卡片 */
+  .axes { display: flex; flex-direction: column; gap: 14px; width: 100%; max-width: 460px; }
+  .axis-card {
+    background: #16213e;
+    border-radius: 14px;
+    padding: 16px;
+    border-left: 4px solid;
+  }
+  .axis-card.x { border-color: #ff6b6b; }
+  .axis-card.y { border-color: #4ecdc4; }
+  .axis-card.z { border-color: #ffe66d; }
+
+  .axis-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+  .axis-name { font-size: 18px; font-weight: 700; }
+  .x .axis-name { color: #ff6b6b; }
+  .y .axis-name { color: #4ecdc4; }
+  .z .axis-name { color: #ffe66d; }
+  .axis-hint { font-size: 11px; color: #555; }
+
+  /* 传感器轨道 */
+  .sensor-track {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    position: relative;
+    padding: 0 10px;
+    margin-bottom: 16px;
+  }
+  .sensor-track::before {
+    content: '';
+    position: absolute;
+    left: 36px; right: 36px;
+    top: 15px;
+    height: 2px;
+    background: #333;
+  }
+
+  .sensor {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    z-index: 1;
+  }
+  .sensor-dot {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    background: #2a2a3e;
+    border: 2.5px solid #444;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    color: transparent;
+  }
+  .sensor.active .sensor-dot {
+    background: #00ff88;
+    border-color: #00ff88;
+    box-shadow: 0 0 18px rgba(0, 255, 136, 0.5);
+    color: transparent;
+  }
+  .sensor.verified .sensor-dot {
+    border-color: #00cc6a;
+    color: #00cc6a;
+  }
+  .sensor.verified.active .sensor-dot {
+    background: #00ff88;
+    border-color: #00ff88;
+    box-shadow: 0 0 18px rgba(0, 255, 136, 0.5);
+    color: #1a1a2e;
+  }
+  .sensor-label { font-size: 11px; color: #777; }
+
+  @keyframes pop {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.3); }
+    100% { transform: scale(1); }
+  }
+  .sensor-dot.pop {
+    animation: pop 0.3s ease;
+  }
+
+  /* 控制按钮 */
+  .controls-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    justify-content: center;
+  }
+  button { border: none; color: white; cursor: pointer; font-weight: 600; border-radius: 10px; }
+  button:active { transform: scale(0.95); }
+  button:disabled { opacity: 0.3; cursor: not-allowed; transform: none; }
+
+  .btn-move { width: 80px; height: 48px; font-size: 18px; }
+  .btn-stop {
+    width: 48px; height: 48px; font-size: 12px; border-radius: 50%;
+    background: linear-gradient(135deg, #e8a838, #d49320);
+  }
+  .x .btn-back { background: linear-gradient(135deg, #c0392b, #a93226); }
+  .x .btn-fwd { background: linear-gradient(135deg, #e74c3c, #c0392b); }
+  .y .btn-back { background: linear-gradient(135deg, #16a085, #138d75); }
+  .y .btn-fwd { background: linear-gradient(135deg, #1abc9c, #16a085); }
+  .z .btn-back { background: linear-gradient(135deg, #d4a017, #b8860b); }
+  .z .btn-fwd { background: linear-gradient(135deg, #f0c040, #d4a017); }
+
+  /* 底部全局控制 */
+  .global-controls {
+    width: 100%; max-width: 460px;
+    margin-top: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .speed-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: center;
+  }
+  .speed-label { font-size: 12px; color: #888; }
+  .speed-dots { display: flex; gap: 4px; }
+  .speed-dot {
+    width: 28px; height: 28px; border-radius: 7px; font-size: 12px;
+    background: #222; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: #888; border: none;
+  }
+  .speed-dot.active { background: #4a90d9; color: white; }
+
+  .stop-all-btn {
+    width: 100%; padding: 12px;
+    font-size: 16px;
+    background: linear-gradient(135deg, #c0392b, #96281b);
+    border-radius: 10px;
+  }
+
+  .reset-btn {
+    width: 100%; padding: 10px;
+    font-size: 13px;
+    background: #333;
+    border-radius: 10px;
+    color: #888;
+  }
+
+  /* 日志 */
+  .log {
+    margin-top: 12px;
+    width: 100%; max-width: 460px; height: 70px;
+    background: #111; border-radius: 10px; padding: 8px;
+    font-family: monospace; font-size: 11px; color: #66ff66; overflow-y: auto;
+  }
+  .hint {
+    margin-top: 8px; font-size: 11px; color: #444; text-align: center; line-height: 1.8;
+  }
+
+  /* 测试通过弹窗 */
+  .success-banner {
+    display: none;
+    width: 100%; max-width: 460px;
+    background: linear-gradient(135deg, #1a3a2a, #224422);
+    border: 1px solid #00ff88;
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+    margin-bottom: 14px;
+  }
+  .success-banner.show { display: block; }
+  .success-banner h2 { color: #00ff88; font-size: 20px; margin-bottom: 4px; }
+  .success-banner p { color: #88cc88; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<h1>传感器测试</h1>
+<div class="top-bar">
+  <div id="status" class="status disconnected">未连接</div>
+  <button id="connectBtn" class="connect-btn" onclick="connect()">连接 Arduino</button>
+</div>
+
+<div id="successBanner" class="success-banner">
+  <h2>测试通过!</h2>
+  <p>全部 9 个传感器工作正常</p>
+</div>
+
+<div class="progress" id="progressBox">
+  <span class="progress-label">测试进度</span>
+  <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+  <span class="progress-count" id="progressCount">0/9</span>
+</div>
+
+<div class="axes">
+  <!-- X轴 -->
+  <div class="axis-card x">
+    <div class="axis-header">
+      <span class="axis-name">X 轴</span>
+      <span class="axis-hint">D22 D23 D24</span>
+    </div>
+    <div class="sensor-track">
+      <div class="sensor" id="s0"><div class="sensor-dot"></div><div class="sensor-label">负限位</div></div>
+      <div class="sensor" id="s1"><div class="sensor-dot"></div><div class="sensor-label">原点</div></div>
+      <div class="sensor" id="s2"><div class="sensor-dot"></div><div class="sensor-label">正限位</div></div>
+    </div>
+    <div class="controls-row">
+      <button class="btn-move btn-back" onmousedown="startMove('X','B')" onmouseup="stopMove('X')" onmouseleave="stopMove('X')" disabled>&larr;</button>
+      <button class="btn-stop" onclick="send('XS')" disabled>停止</button>
+      <button class="btn-move btn-fwd" onmousedown="startMove('X','F')" onmouseup="stopMove('X')" onmouseleave="stopMove('X')" disabled>&rarr;</button>
+    </div>
+  </div>
+
+  <!-- Y轴 -->
+  <div class="axis-card y">
+    <div class="axis-header">
+      <span class="axis-name">Y 轴</span>
+      <span class="axis-hint">D25 D26 D27</span>
+    </div>
+    <div class="sensor-track">
+      <div class="sensor" id="s3"><div class="sensor-dot"></div><div class="sensor-label">负限位</div></div>
+      <div class="sensor" id="s4"><div class="sensor-dot"></div><div class="sensor-label">原点</div></div>
+      <div class="sensor" id="s5"><div class="sensor-dot"></div><div class="sensor-label">正限位</div></div>
+    </div>
+    <div class="controls-row">
+      <button class="btn-move btn-back" onmousedown="startMove('Y','B')" onmouseup="stopMove('Y')" onmouseleave="stopMove('Y')" disabled>&larr;</button>
+      <button class="btn-stop" onclick="send('YS')" disabled>停止</button>
+      <button class="btn-move btn-fwd" onmousedown="startMove('Y','F')" onmouseup="stopMove('Y')" onmouseleave="stopMove('Y')" disabled>&rarr;</button>
+    </div>
+  </div>
+
+  <!-- Z轴 -->
+  <div class="axis-card z">
+    <div class="axis-header">
+      <span class="axis-name">Z 轴</span>
+      <span class="axis-hint">D28 D29 D30</span>
+    </div>
+    <div class="sensor-track">
+      <div class="sensor" id="s6"><div class="sensor-dot"></div><div class="sensor-label">负限位</div></div>
+      <div class="sensor" id="s7"><div class="sensor-dot"></div><div class="sensor-label">原点</div></div>
+      <div class="sensor" id="s8"><div class="sensor-dot"></div><div class="sensor-label">正限位</div></div>
+    </div>
+    <div class="controls-row">
+      <button class="btn-move btn-back" onmousedown="startMove('Z','B')" onmouseup="stopMove('Z')" onmouseleave="stopMove('Z')" disabled>&uarr;</button>
+      <button class="btn-stop" onclick="send('ZS')" disabled>停止</button>
+      <button class="btn-move btn-fwd" onmousedown="startMove('Z','F')" onmouseup="stopMove('Z')" onmouseleave="stopMove('Z')" disabled>&darr;</button>
+    </div>
+  </div>
+</div>
+
+<div class="global-controls">
+  <div class="speed-row">
+    <span class="speed-label">速度</span>
+    <div class="speed-dots" id="speedDots"></div>
+  </div>
+  <button class="stop-all-btn" onclick="send('S')" disabled>全部急停</button>
+  <button class="reset-btn" onclick="resetTest()" disabled>重置测试</button>
+</div>
+
+<div class="log" id="log"></div>
+<div class="hint">
+  长按方向键 = 持续移动 | 松开 = 停止<br>
+  键盘: A/D=X轴 | 左/右=Y轴 | W/S=Z轴 | 空格=全部停止
+</div>
+
+<script>
+let port, reader, writer;
+let connected = false;
+const holdTimers = {};
+const isHolding = {};
+let currentSpeed = 3;
+const verified = new Array(9).fill(false);
+
+// 初始化速度选择器
+const speedContainer = document.getElementById('speedDots');
+for (let i = 1; i <= 9; i++) {
+  const dot = document.createElement('button');
+  dot.className = 'speed-dot' + (i === 3 ? ' active' : '');
+  dot.textContent = i;
+  dot.onclick = () => setSpeed(i);
+  speedContainer.appendChild(dot);
+}
+
+function setSpeed(spd) {
+  if (!connected) return;
+  currentSpeed = spd;
+  ['X','Y','Z'].forEach(a => send(a + spd));
+  speedContainer.querySelectorAll('.speed-dot').forEach((d, idx) => {
+    d.classList.toggle('active', idx + 1 === spd);
+  });
+}
+
+// 触摸事件 —— 移动按钮
+document.querySelectorAll('.btn-move').forEach(btn => {
+  btn.addEventListener('touchstart', e => {
+    e.preventDefault();
+    btn.onmousedown?.(e);
+  }, { passive: false });
+  btn.addEventListener('touchend', e => {
+    btn.onmouseup?.(e);
+  });
+  btn.addEventListener('touchcancel', e => {
+    btn.onmouseleave?.(e);
+  });
+});
+
+async function connect() {
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 115200 });
+    const enc = new TextEncoderStream();
+    enc.readable.pipeTo(port.writable);
+    writer = enc.writable.getWriter();
+    const dec = new TextDecoderStream();
+    port.readable.pipeTo(dec.writable);
+    reader = dec.readable.getReader();
+    connected = true;
+    document.getElementById('status').textContent = '已连接';
+    document.getElementById('status').className = 'status connected';
+    document.getElementById('connectBtn').disabled = true;
+    document.querySelectorAll('button:not(.connect-btn)').forEach(b => b.disabled = false);
+    log('已连接到 Arduino');
+    // 设置初始速度
+    setTimeout(() => setSpeed(currentSpeed), 300);
+    readLoop();
+  } catch (e) { log('连接失败: ' + e.message); }
+}
+
+async function readLoop() {
+  let buffer = '';
+  while (true) {
+    try {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      buffer += value;
+      let idx;
+      while ((idx = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.substring(0, idx).trim();
+        buffer = buffer.substring(idx + 1);
+        if (line.startsWith('SENS:')) {
+          updateSensors(line.substring(5));
+        } else if (line) {
+          log('\u2190 ' + line);
+        }
+      }
+    } catch (e) { log('读取断开'); break; }
+  }
+}
+
+function updateSensors(data) {
+  if (data.length < 9) return;
+  let changed = false;
+  for (let i = 0; i < 9; i++) {
+    const active = data[i] === '1';
+    const el = document.getElementById('s' + i);
+    const dot = el.querySelector('.sensor-dot');
+    const wasActive = el.classList.contains('active');
+    el.classList.toggle('active', active);
+    if (active && !verified[i]) {
+      verified[i] = true;
+      el.classList.add('verified');
+      dot.textContent = '\u2713';
+      // 弹跳动画
+      dot.classList.remove('pop');
+      void dot.offsetWidth;
+      dot.classList.add('pop');
+      changed = true;
+    }
+  }
+  if (changed) updateProgress();
+}
+
+function updateProgress() {
+  const count = verified.filter(v => v).length;
+  document.getElementById('progressCount').textContent = count + '/9';
+  document.getElementById('progressFill').style.width = (count / 9 * 100) + '%';
+  if (count === 9) {
+    document.getElementById('progressBox').classList.add('done');
+    document.getElementById('successBanner').classList.add('show');
+  }
+}
+
+function resetTest() {
+  for (let i = 0; i < 9; i++) {
+    verified[i] = false;
+    const el = document.getElementById('s' + i);
+    el.classList.remove('verified');
+    el.querySelector('.sensor-dot').textContent = '';
+  }
+  document.getElementById('progressCount').textContent = '0/9';
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('progressBox').classList.remove('done');
+  document.getElementById('successBanner').classList.remove('show');
+  log('测试已重置');
+}
+
+async function send(cmd) {
+  if (!connected || !writer) return;
+  try { await writer.write(cmd); log('\u2192 ' + cmd); }
+  catch (e) { log('发送失败: ' + e.message); }
+}
+
+function startMove(axis, dir) {
+  if (!connected) return;
+  isHolding[axis] = false;
+  send(axis + dir);
+  holdTimers[axis] = setTimeout(() => {
+    isHolding[axis] = true;
+    send(axis + (dir === 'F' ? 'R' : 'L'));
+  }, 400);
+}
+
+function stopMove(axis) {
+  if (holdTimers[axis]) { clearTimeout(holdTimers[axis]); holdTimers[axis] = null; }
+  if (isHolding[axis]) { send(axis + 'S'); isHolding[axis] = false; }
+}
+
+function log(msg) {
+  const el = document.getElementById('log');
+  el.textContent += msg + '\n';
+  el.scrollTop = el.scrollHeight;
+}
+
+// 键盘控制
+const keyMap = {
+  'd': ['X','F'], 'a': ['X','B'],
+  'ArrowRight': ['Y','F'], 'ArrowLeft': ['Y','B'],
+  'w': ['Z','F'], 's': ['Z','B']
+};
+let keyHeld = {};
+document.addEventListener('keydown', e => {
+  if (!connected || keyHeld[e.key]) return;
+  if (e.key === ' ') { e.preventDefault(); send('S'); return; }
+  const m = keyMap[e.key];
+  if (m) { e.preventDefault(); keyHeld[e.key] = true; startMove(m[0], m[1]); }
+});
+document.addEventListener('keyup', e => {
+  const m = keyMap[e.key];
+  if (m) { keyHeld[e.key] = false; stopMove(m[0]); }
+});
+</script>
+
+</body>
+</html>

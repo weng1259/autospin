@@ -1,0 +1,1225 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>三轴运动控制</title>
+<style>
+  :root {
+    --blue: #0071e3;
+    --blue-hover: #0077ED;
+    --red: #ff3b30;
+    --green: #34c759;
+    --orange: #ff9500;
+    --yellow: #ffcc00;
+    --bg: #f5f5f7;
+    --card: #fff;
+    --text: #1d1d1f;
+    --text2: #86868b;
+    --text3: #ababab;
+    --border: #e8e8ed;
+    --shadow: 0 2px 12px rgba(0,0,0,0.06);
+    --radius: 16px;
+    --radius-sm: 10px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* ===== Header ===== */
+  .header {
+    text-align: center;
+    padding: 32px 20px 8px;
+  }
+  .header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+  .header p {
+    font-size: 13px;
+    color: var(--text2);
+    margin-top: 4px;
+  }
+
+  /* ===== Layout ===== */
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 12px 20px 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .card {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 20px;
+    box-shadow: var(--shadow);
+  }
+  .card-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
+  }
+
+  /* ===== Connection ===== */
+  .conn-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 20px;
+    flex-wrap: wrap;
+  }
+  .conn-btn {
+    padding: 8px 20px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: var(--blue);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+  }
+  .conn-btn:hover { background: var(--blue-hover); }
+  .conn-btn:active { transform: scale(0.97); }
+  .conn-btn:disabled { background: var(--text3); cursor: not-allowed; }
+  .conn-btn.connected { background: var(--green); }
+  .conn-btn.relay { background: var(--orange); }
+  .conn-btn.relay:hover { background: #e08600; }
+  .conn-btn.relay-connected { background: var(--green); }
+
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--red);
+    flex-shrink: 0;
+    transition: background 0.3s;
+  }
+  .status-dot.on { background: var(--green); }
+  .conn-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text2);
+    margin-left: auto;
+  }
+  .conn-status span.sep { color: var(--border); margin: 0 4px; }
+
+  /* ===== Main Grid ===== */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  @media (min-width: 768px) {
+    .main-grid {
+      grid-template-columns: 1fr 340px;
+    }
+  }
+
+  /* ===== Canvas Area ===== */
+  .canvas-card {
+    display: flex;
+    gap: 12px;
+    align-items: stretch;
+  }
+  .canvas-wrap {
+    flex: 1;
+    position: relative;
+    aspect-ratio: 1;
+    background: #fff;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .canvas-wrap canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  /* Z bar */
+  .z-bar-wrap {
+    width: 48px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .z-bar-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text2);
+  }
+  .z-bar {
+    flex: 1;
+    width: 28px;
+    background: #f0f0f5;
+    border-radius: 14px;
+    position: relative;
+    overflow: hidden;
+    min-height: 100px;
+  }
+  .z-fill {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(to top, var(--blue), #64acff);
+    border-radius: 14px;
+    transition: height 0.15s ease;
+  }
+  .z-val {
+    font-size: 11px;
+    color: var(--text2);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ===== Position Readout ===== */
+  .pos-grid {
+    display: flex;
+    gap: 16px;
+  }
+  .pos-item {
+    flex: 1;
+    text-align: center;
+  }
+  .pos-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text2);
+    margin-bottom: 4px;
+  }
+  .pos-value {
+    display: block;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    font-variant-numeric: tabular-nums;
+  }
+  .pos-steps {
+    display: block;
+    font-size: 11px;
+    color: var(--text3);
+    margin-top: 2px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ===== Axis Controls ===== */
+  .axis-ctrl {
+    padding: 14px 16px;
+  }
+  .axis-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .axis-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .axis-dot.x { background: var(--red); }
+  .axis-dot.y { background: var(--green); }
+  .axis-dot.z { background: var(--blue); }
+  .axis-label {
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .move-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 10px;
+  }
+  .move-btn {
+    width: 72px;
+    height: 44px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: var(--blue);
+    color: #fff;
+    font-size: 18px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.1s, opacity 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .move-btn:active { transform: scale(0.93); }
+  .move-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .stop-btn {
+    width: 44px;
+    height: 44px;
+    border: none;
+    border-radius: 50%;
+    background: #f5f5f7;
+    color: var(--text2);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.1s;
+    border: 1px solid var(--border);
+  }
+  .stop-btn:active { transform: scale(0.93); }
+  .stop-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  .settings-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .setting-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .setting-label {
+    font-size: 11px;
+    color: var(--text2);
+    font-weight: 500;
+  }
+  .speed-seg {
+    display: flex;
+    background: #f0f0f5;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .speed-seg-item {
+    width: 22px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: var(--text2);
+    cursor: pointer;
+    transition: all 0.15s;
+    font-weight: 500;
+  }
+  .speed-seg-item.active {
+    background: var(--blue);
+    color: #fff;
+    font-weight: 600;
+  }
+
+  .adj-btn {
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--text);
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.1s;
+  }
+  .adj-btn:active { transform: scale(0.9); }
+  .adj-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .adj-val {
+    font-size: 13px;
+    font-weight: 600;
+    min-width: 32px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ===== Brake ===== */
+  .brake-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .brake-btn {
+    flex: 1;
+    padding: 10px;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    color: #fff;
+    transition: transform 0.1s, opacity 0.2s;
+  }
+  .brake-btn:active { transform: scale(0.95); }
+  .brake-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .brake-btn.release { background: var(--green); }
+  .brake-btn.lock { background: var(--red); }
+  .brake-status {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-weight: 600;
+    margin-left: auto;
+  }
+  .brake-status.locked { background: #ffe5e5; color: var(--red); }
+  .brake-status.released { background: #e5f9ed; color: #1a8d3f; }
+  .brake-status.unknown { background: #f0f0f5; color: var(--text3); }
+
+  /* ===== Status Row (Sensors + Alarms) ===== */
+  .status-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  @media (max-width: 767px) {
+    .status-grid { grid-template-columns: 1fr; }
+  }
+  .sensor-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .sensor-row:last-child { margin-bottom: 0; }
+  .sensor-axis {
+    font-size: 12px;
+    font-weight: 600;
+    width: 16px;
+    color: var(--text2);
+  }
+  .sensor-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: #e8e8ed;
+    transition: background 0.2s;
+    flex-shrink: 0;
+  }
+  .sensor-dot.active { background: var(--green); box-shadow: 0 0 6px rgba(52,199,89,0.4); }
+  .sensor-name {
+    font-size: 10px;
+    color: var(--text3);
+  }
+
+  .alarm-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .alarm-item:last-child { margin-bottom: 0; }
+  .alarm-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--green);
+    transition: background 0.2s;
+    flex-shrink: 0;
+  }
+  .alarm-dot.alarm { background: var(--red); box-shadow: 0 0 8px rgba(255,59,48,0.5); }
+  .alarm-text {
+    font-size: 12px;
+    color: var(--text2);
+  }
+  .alarm-text.alarm { color: var(--red); font-weight: 600; }
+  .card.alarm-active {
+    background: #fff5f5;
+    border: 1px solid rgba(255,59,48,0.2);
+  }
+
+  /* ===== Emergency Stop ===== */
+  .estop-btn {
+    width: 100%;
+    padding: 14px;
+    background: var(--red);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 700;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: transform 0.1s;
+    letter-spacing: 0.5px;
+  }
+  .estop-btn:active { transform: scale(0.97); }
+  .estop-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  /* ===== Log ===== */
+  .log-card { padding: 12px 16px; }
+  .log-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+  }
+  .log-toggle {
+    font-size: 11px;
+    color: var(--blue);
+    font-weight: 500;
+  }
+  .log {
+    height: 120px;
+    overflow-y: auto;
+    background: #fafafa;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-family: 'SF Mono', 'Menlo', monospace;
+    font-size: 11px;
+    color: var(--text);
+    line-height: 1.6;
+    margin-top: 8px;
+    display: none;
+  }
+  .log.open { display: block; }
+  .log .tx { color: var(--blue); }
+  .log .rx { color: var(--green); font-weight: 500; }
+  .log .info { color: var(--text3); font-style: italic; }
+  .log .err { color: var(--red); }
+
+  /* ===== Hints ===== */
+  .hints {
+    text-align: center;
+    font-size: 11px;
+    color: var(--text3);
+    padding: 4px 0 0;
+    line-height: 1.8;
+  }
+
+  /* ===== Responsive ===== */
+  @media (max-width: 767px) {
+    .header { padding-top: 20px; }
+    .header h1 { font-size: 22px; }
+    .canvas-card { flex-direction: column; }
+    .z-bar-wrap {
+      width: 100%;
+      flex-direction: row;
+      height: 32px;
+      min-height: unset;
+    }
+    .z-bar {
+      flex: 1;
+      width: auto;
+      height: 20px;
+      min-height: unset;
+      border-radius: 10px;
+    }
+    .z-fill {
+      top: 0;
+      bottom: 0;
+      right: auto;
+      width: 0;
+      height: 100% !important;
+      border-radius: 10px;
+      transition: width 0.15s ease;
+    }
+    .pos-grid { gap: 8px; }
+    .pos-value { font-size: 18px; }
+    .conn-status { margin-left: 0; flex-basis: 100%; margin-top: 4px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>三轴运动控制</h1>
+  <p>GH40 龙门架 · 闭环模式</p>
+</div>
+
+<div class="container">
+  <!-- Connection -->
+  <div class="card conn-card">
+    <button class="conn-btn" id="connectBtn" onclick="connectArduino()">连接 Arduino</button>
+    <button class="conn-btn relay" id="relayBtn" onclick="connectRelay()">连接继电器</button>
+    <div class="conn-status">
+      <span class="status-dot" id="arduinoDot"></span><span>Arduino</span>
+      <span class="sep">|</span>
+      <span class="status-dot" id="relayDot"></span><span>继电器</span>
+    </div>
+  </div>
+
+  <!-- Main grid: Canvas | Controls -->
+  <div class="main-grid">
+    <!-- Left: Visualization -->
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <!-- XY Canvas + Z bar -->
+      <div class="card canvas-card">
+        <div class="canvas-wrap">
+          <canvas id="xyCanvas"></canvas>
+        </div>
+        <div class="z-bar-wrap">
+          <span class="z-bar-label">Z</span>
+          <div class="z-bar">
+            <div class="z-fill" id="zFill"></div>
+          </div>
+          <span class="z-val" id="zVal">0.0</span>
+        </div>
+      </div>
+
+      <!-- Position readout -->
+      <div class="card">
+        <div class="pos-grid">
+          <div class="pos-item">
+            <span class="pos-label">X</span>
+            <span class="pos-value" id="posXVal">0.00</span>
+            <span class="pos-steps" id="posXSteps">0 步</span>
+          </div>
+          <div class="pos-item">
+            <span class="pos-label">Y</span>
+            <span class="pos-value" id="posYVal">0.00</span>
+            <span class="pos-steps" id="posYSteps">0 步</span>
+          </div>
+          <div class="pos-item">
+            <span class="pos-label">Z</span>
+            <span class="pos-value" id="posZVal">0.00</span>
+            <span class="pos-steps" id="posZSteps">0 步</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sensors + Alarms -->
+      <div class="status-grid">
+        <div class="card" id="sensorCard">
+          <div class="card-title">传感器</div>
+          <div class="sensor-row">
+            <span class="sensor-axis">X</span>
+            <span class="sensor-dot" id="s0"></span><span class="sensor-name">负限</span>
+            <span class="sensor-dot" id="s1"></span><span class="sensor-name">原点</span>
+            <span class="sensor-dot" id="s2"></span><span class="sensor-name">正限</span>
+          </div>
+          <div class="sensor-row">
+            <span class="sensor-axis">Y</span>
+            <span class="sensor-dot" id="s3"></span><span class="sensor-name">负限</span>
+            <span class="sensor-dot" id="s4"></span><span class="sensor-name">原点</span>
+            <span class="sensor-dot" id="s5"></span><span class="sensor-name">正限</span>
+          </div>
+          <div class="sensor-row">
+            <span class="sensor-axis">Z</span>
+            <span class="sensor-dot" id="s6"></span><span class="sensor-name">负限</span>
+            <span class="sensor-dot" id="s7"></span><span class="sensor-name">原点</span>
+            <span class="sensor-dot" id="s8"></span><span class="sensor-name">正限</span>
+          </div>
+        </div>
+        <div class="card" id="alarmCard">
+          <div class="card-title">驱动器报警</div>
+          <div class="alarm-item">
+            <span class="alarm-dot" id="almX"></span>
+            <span class="alarm-text" id="almXText">X 正常</span>
+          </div>
+          <div class="alarm-item">
+            <span class="alarm-dot" id="almY"></span>
+            <span class="alarm-text" id="almYText">Y 正常</span>
+          </div>
+          <div class="alarm-item">
+            <span class="alarm-dot" id="almZ"></span>
+            <span class="alarm-text" id="almZText">Z 正常</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Controls -->
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <!-- X axis -->
+      <div class="card axis-ctrl">
+        <div class="axis-header">
+          <span class="axis-dot x"></span>
+          <span class="axis-label">X 轴</span>
+        </div>
+        <div class="move-row">
+          <button class="move-btn" id="xb" disabled>&larr;</button>
+          <button class="stop-btn" id="xs" onclick="send('XS')" disabled>停</button>
+          <button class="move-btn" id="xf" disabled>&rarr;</button>
+        </div>
+        <div class="settings-row">
+          <div class="setting-group">
+            <span class="setting-label">速度</span>
+            <div class="speed-seg" id="speed-X"></div>
+          </div>
+          <div class="setting-group">
+            <span class="setting-label">步距</span>
+            <button class="adj-btn" onclick="changeStep('X',-1)" disabled>&minus;</button>
+            <span class="adj-val" id="step-X">50</span>
+            <button class="adj-btn" onclick="changeStep('X',1)" disabled>+</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Y axis -->
+      <div class="card axis-ctrl">
+        <div class="axis-header">
+          <span class="axis-dot y"></span>
+          <span class="axis-label">Y 轴</span>
+        </div>
+        <div class="move-row">
+          <button class="move-btn" id="yb" disabled>&larr;</button>
+          <button class="stop-btn" id="ys" onclick="send('YS')" disabled>停</button>
+          <button class="move-btn" id="yf" disabled>&rarr;</button>
+        </div>
+        <div class="settings-row">
+          <div class="setting-group">
+            <span class="setting-label">速度</span>
+            <div class="speed-seg" id="speed-Y"></div>
+          </div>
+          <div class="setting-group">
+            <span class="setting-label">步距</span>
+            <button class="adj-btn" onclick="changeStep('Y',-1)" disabled>&minus;</button>
+            <span class="adj-val" id="step-Y">50</span>
+            <button class="adj-btn" onclick="changeStep('Y',1)" disabled>+</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Z axis -->
+      <div class="card axis-ctrl">
+        <div class="axis-header">
+          <span class="axis-dot z"></span>
+          <span class="axis-label">Z 轴</span>
+        </div>
+        <div class="move-row">
+          <button class="move-btn" id="zf" disabled>&uarr;</button>
+          <button class="stop-btn" id="zs" onclick="send('ZS')" disabled>停</button>
+          <button class="move-btn" id="zb" disabled>&darr;</button>
+        </div>
+        <div class="settings-row">
+          <div class="setting-group">
+            <span class="setting-label">速度</span>
+            <div class="speed-seg" id="speed-Z"></div>
+          </div>
+          <div class="setting-group">
+            <span class="setting-label">步距</span>
+            <button class="adj-btn" onclick="changeStep('Z',-1)" disabled>&minus;</button>
+            <span class="adj-val" id="step-Z">50</span>
+            <button class="adj-btn" onclick="changeStep('Z',1)" disabled>+</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Brake -->
+      <div class="card axis-ctrl">
+        <div class="axis-header">
+          <span class="axis-label">Z 轴刹车</span>
+          <span id="brakeStatus" class="brake-status unknown">未连接</span>
+        </div>
+        <div class="brake-row">
+          <button class="brake-btn release" id="brakeRelease" onclick="brakeRelease()" disabled>释放刹车</button>
+          <button class="brake-btn lock" id="brakeLock" onclick="brakeLock()" disabled>锁定刹车</button>
+        </div>
+      </div>
+
+      <!-- Emergency Stop -->
+      <button class="estop-btn" id="estopBtn" onclick="send('S')" disabled>全部急停</button>
+    </div>
+  </div>
+
+  <!-- Log -->
+  <div class="card log-card">
+    <div class="log-header" onclick="toggleLog()">
+      <span class="card-title" style="margin-bottom:0">通信日志</span>
+      <span class="log-toggle" id="logToggle">展开</span>
+    </div>
+    <div class="log" id="log"></div>
+  </div>
+
+  <!-- Hints -->
+  <div class="hints">
+    键盘: A/D = X轴 &nbsp;|&nbsp; &larr;/&rarr; = Y轴 &nbsp;|&nbsp; W/S = Z轴 &nbsp;|&nbsp; 空格 = 全部急停
+  </div>
+</div>
+
+<script>
+/* ===== Configuration ===== */
+const STEPS_PER_MM = 682.67;  // 51200细分 ÷ 75mm/转(HTD3M 25齿), 2026-03-26 尺子实测确认
+const TRAVEL_X = 300;        // mm
+const TRAVEL_Y = 300;
+const TRAVEL_Z = 100;
+
+/* ===== State ===== */
+const state = {
+  connected: false,
+  relayConnected: false,
+  position: { x: 0, y: 0, z: 0 },
+  sensors: '000000000',
+  alarms: '000',
+  speed: { X: 4, Y: 4, Z: 4 },
+  steps: { X: 50, Y: 50, Z: 50 },
+  brakeState: null,
+};
+
+let port, writer;
+let relayPort = null;
+let relaySending = false;
+const holdTimers = {};
+const isHolding = {};
+
+/* ===== Serial: Arduino ===== */
+async function connectArduino() {
+  if (state.connected) return;
+  if (!('serial' in navigator)) { logMsg('浏览器不支持 Web Serial', 'err'); return; }
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 115200 });
+    const enc = new TextEncoderStream();
+    enc.readable.pipeTo(port.writable);
+    writer = enc.writable.getWriter();
+    state.connected = true;
+    document.getElementById('connectBtn').textContent = '已连接';
+    document.getElementById('connectBtn').classList.add('connected');
+    document.getElementById('connectBtn').disabled = true;
+    document.getElementById('arduinoDot').classList.add('on');
+    enableButtons();
+    logMsg('已连接 Arduino (115200)', 'info');
+    readLoop();
+  } catch (e) { logMsg('连接失败: ' + e.message, 'err'); }
+}
+
+async function readLoop() {
+  const dec = new TextDecoderStream();
+  port.readable.pipeTo(dec.writable);
+  const reader = dec.readable.getReader();
+  let buf = '';
+  while (true) {
+    try {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += value;
+      let lines = buf.split('\n');
+      buf = lines.pop();
+      for (const raw of lines) {
+        const line = raw.trim();
+        if (!line) continue;
+        if (line.startsWith('SENS:')) {
+          state.sensors = line.substring(5);
+          updateSensors();
+        } else if (line.startsWith('POS:')) {
+          const parts = line.substring(4).split(',');
+          state.position.x = parseInt(parts[0]) || 0;
+          state.position.y = parseInt(parts[1]) || 0;
+          state.position.z = parseInt(parts[2]) || 0;
+          updatePosition();
+          renderCanvas();
+        } else if (line.startsWith('ALM:')) {
+          state.alarms = line.substring(4);
+          updateAlarms();
+        } else {
+          logMsg(line, 'rx');
+        }
+      }
+    } catch (e) {
+      logMsg('连接断开', 'err');
+      break;
+    }
+  }
+}
+
+async function send(cmd) {
+  if (!state.connected || !writer) return;
+  try {
+    await writer.write(cmd);
+    logMsg(cmd, 'tx');
+  } catch (e) { logMsg('发送失败: ' + e.message, 'err'); }
+}
+
+/* ===== Serial: Relay ===== */
+async function connectRelay() {
+  if (state.relayConnected) return;
+  if (!('serial' in navigator)) { logMsg('浏览器不支持 Web Serial', 'err'); return; }
+  try {
+    relayPort = await navigator.serial.requestPort();
+    await relayPort.open({ baudRate: 9600, bufferSize: 256 });
+    state.relayConnected = true;
+    document.getElementById('relayBtn').textContent = '继电器已连接';
+    document.getElementById('relayBtn').className = 'conn-btn relay-connected';
+    document.getElementById('relayBtn').disabled = true;
+    document.getElementById('relayDot').classList.add('on');
+    document.getElementById('brakeRelease').disabled = false;
+    document.getElementById('brakeLock').disabled = false;
+    updateBrakeStatus(null);
+    logMsg('已连接继电器 (9600)', 'info');
+    relayReadLoop();
+  } catch (e) { logMsg('继电器连接失败: ' + e.message, 'err'); }
+}
+
+async function relayReadLoop() {
+  while (state.relayConnected && relayPort?.readable) {
+    const r = relayPort.readable.getReader();
+    try {
+      while (true) {
+        const { value, done } = await r.read();
+        if (done) break;
+        if (value) {
+          const hex = Array.from(value).map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+          logMsg('继电器 ← ' + hex, 'rx');
+        }
+      }
+    } catch (e) {
+      logMsg('继电器重连...', 'info');
+    } finally {
+      try { r.releaseLock(); } catch(e) {}
+    }
+  }
+}
+
+async function relaySend(bytes) {
+  if (!state.relayConnected || !relayPort) { logMsg('请先连接继电器', 'err'); return false; }
+  if (relaySending) { logMsg('继电器忙', 'info'); return false; }
+  relaySending = true;
+  let w = null;
+  try {
+    w = relayPort.writable.getWriter();
+    const writePromise = w.write(new Uint8Array(bytes));
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('写入超时')), 2000));
+    await Promise.race([writePromise, timeoutPromise]);
+    const hex = bytes.map(b => '0x' + b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+    logMsg('继电器 → ' + hex, 'tx');
+    return true;
+  } catch (e) {
+    logMsg('继电器发送失败: ' + e.message, 'err');
+    return false;
+  } finally {
+    if (w) { try { w.releaseLock(); } catch(e) {} }
+    await new Promise(r => setTimeout(r, 100));
+    relaySending = false;
+  }
+}
+
+async function brakeRelease() {
+  const ok = await relaySend([0xA0, 0x02, 0x01, 0xA3]);
+  if (ok) { state.brakeState = true; updateBrakeStatus(true); }
+}
+
+async function brakeLock() {
+  const ok = await relaySend([0xA0, 0x02, 0x00, 0xA2]);
+  if (ok) { state.brakeState = false; updateBrakeStatus(false); }
+}
+
+function updateBrakeStatus(released) {
+  const el = document.getElementById('brakeStatus');
+  if (released === null) {
+    el.textContent = '就绪'; el.className = 'brake-status unknown';
+  } else if (released) {
+    el.textContent = '已释放'; el.className = 'brake-status released';
+  } else {
+    el.textContent = '已锁定'; el.className = 'brake-status locked';
+  }
+}
+
+/* ===== Move Controls ===== */
+function startMove(axis, dir) {
+  if (!state.connected) return;
+  isHolding[axis] = false;
+  send(axis + dir);
+  holdTimers[axis] = setTimeout(() => {
+    isHolding[axis] = true;
+    send(axis + (dir === 'F' ? 'R' : 'L'));
+  }, 500);
+}
+
+function stopMove(axis) {
+  if (holdTimers[axis]) { clearTimeout(holdTimers[axis]); holdTimers[axis] = null; }
+  if (isHolding[axis]) { send(axis + 'S'); isHolding[axis] = false; }
+}
+
+function changeStep(axis, delta) {
+  if (!state.connected) return;
+  send(axis + (delta > 0 ? 'N' : 'M'));
+  state.steps[axis] = Math.max(50, state.steps[axis] + delta * 50);
+  document.getElementById('step-' + axis).textContent = state.steps[axis];
+}
+
+/* ===== UI Updates ===== */
+function updatePosition() {
+  const mm = {
+    x: (state.position.x / STEPS_PER_MM).toFixed(2),
+    y: (state.position.y / STEPS_PER_MM).toFixed(2),
+    z: (state.position.z / STEPS_PER_MM).toFixed(2),
+  };
+  document.getElementById('posXVal').textContent = mm.x;
+  document.getElementById('posYVal').textContent = mm.y;
+  document.getElementById('posZVal').textContent = mm.z;
+  document.getElementById('posXSteps').textContent = state.position.x + ' 步';
+  document.getElementById('posYSteps').textContent = state.position.y + ' 步';
+  document.getElementById('posZSteps').textContent = state.position.z + ' 步';
+
+  // Z bar
+  const zPct = Math.max(0, Math.min(100, (state.position.z / STEPS_PER_MM) / TRAVEL_Z * 100));
+  const zFill = document.getElementById('zFill');
+  const isMobile = window.innerWidth < 768;
+  if (isMobile) {
+    zFill.style.height = '100%';
+    zFill.style.width = zPct + '%';
+  } else {
+    zFill.style.width = '';
+    zFill.style.height = zPct + '%';
+  }
+  document.getElementById('zVal').textContent = (state.position.z / STEPS_PER_MM).toFixed(1);
+}
+
+function updateSensors() {
+  for (let i = 0; i < 9; i++) {
+    const el = document.getElementById('s' + i);
+    if (el) el.classList.toggle('active', state.sensors[i] === '1');
+  }
+}
+
+function updateAlarms() {
+  const axes = ['X', 'Y', 'Z'];
+  const card = document.getElementById('alarmCard');
+  let hasAlarm = false;
+  for (let i = 0; i < 3; i++) {
+    const isAlarm = state.alarms[i] === '1';
+    if (isAlarm) hasAlarm = true;
+    const dot = document.getElementById('alm' + axes[i]);
+    const text = document.getElementById('alm' + axes[i] + 'Text');
+    dot.classList.toggle('alarm', isAlarm);
+    text.textContent = axes[i] + (isAlarm ? ' 报警!' : ' 正常');
+    text.classList.toggle('alarm', isAlarm);
+  }
+  card.classList.toggle('alarm-active', hasAlarm);
+}
+
+function enableButtons() {
+  document.querySelectorAll('.move-btn, .stop-btn, .adj-btn, .estop-btn').forEach(b => b.disabled = false);
+  if (state.relayConnected) {
+    document.getElementById('brakeRelease').disabled = false;
+    document.getElementById('brakeLock').disabled = false;
+  }
+}
+
+/* ===== Canvas ===== */
+let canvasReady = false;
+let canvasSize = 0;
+
+function setupCanvas() {
+  const canvas = document.getElementById('xyCanvas');
+  const wrap = canvas.parentElement;
+  const rect = wrap.getBoundingClientRect();
+  const size = Math.floor(Math.min(rect.width, rect.height));
+  if (size < 10) return;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = size * dpr;
+  canvas.height = size * dpr;
+  canvasSize = size;
+  canvasReady = true;
+  renderCanvas();
+}
+
+function renderCanvas() {
+  if (!canvasReady) return;
+  const canvas = document.getElementById('xyCanvas');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvasSize;
+  ctx.save();
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, w);
+
+  // Background
+  ctx.fillStyle = '#fafafa';
+  ctx.fillRect(0, 0, w, w);
+
+  const pad = 32;
+  const area = w - pad * 2;
+
+  // Helper: mm → canvas px
+  const toX = mm => pad + (mm / TRAVEL_X) * area;
+  const toY = mm => pad + area - (mm / TRAVEL_Y) * area;
+
+  // Grid
+  ctx.lineWidth = 0.5;
+  for (let mm = 0; mm <= TRAVEL_X; mm += 10) {
+    const isMajor = mm % 50 === 0;
+    ctx.strokeStyle = isMajor ? '#d2d2d7' : '#ececf0';
+    ctx.lineWidth = isMajor ? 0.8 : 0.5;
+    ctx.beginPath();
+    ctx.moveTo(toX(mm), pad);
+    ctx.lineTo(toX(mm), pad + area);
+    ctx.stroke();
+  }
+  for (let mm = 0; mm <= TRAVEL_Y; mm += 10) {
+    const isMajor = mm % 50 === 0;
+    ctx.strokeStyle = isMajor ? '#d2d2d7' : '#ececf0';
+    ctx.lineWidth = isMajor ? 0.8 : 0.5;
+    ctx.beginPath();
+    ctx.moveTo(pad, toY(mm));
+    ctx.lineTo(pad + area, toY(mm));
+    ctx.stroke();
+  }
+
+  // Axis labels
+  ctx.fillStyle = '#86868b';
+  ctx.font = '10px -apple-system, sans-serif';
+  ctx.textAlign = 'center';
+  for (let mm = 0; mm <= TRAVEL_X; mm += 50) {
+    ctx.fillText(mm, toX(mm), pad + area + 14);
+  }
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  for (let mm = 0; mm <= TRAVEL_Y; mm += 50) {
+    ctx.fillText(mm, pad - 6, toY(mm));
+  }
+
+  // Axis names
+  ctx.fillStyle = '#ababab';
+  ctx.font = '11px -apple-system, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillText('X (mm)', w / 2, pad + area + 22);
+  ctx.save();
+  ctx.translate(10, w / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.textBaseline = 'middle';
+  ctx.fillText('Y (mm)', 0, 0);
+  ctx.restore();
+
+  // Home marker
+  ctx.beginPath();
+  const hx = toX(0), hy = toY(0);
+  ctx.arc(hx, hy, 4, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.08)';
+  ctx.fill();
+  ctx.fillStyle = '#ababab';
+  ctx.font = '9px -apple-system, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText('HOME', hx + 6, hy - 2);
+
+  // Current position
+  const posXmm = state.position.x / STEPS_PER_MM;
+  const posYmm = state.position.y / STEPS_PER_MM;
+  const px = toX(Math.max(0, Math.min(TRAVEL_X, posXmm)));
+  const py = toY(Math.max(0, Math.min(TRAVEL_Y, posYmm)));
+
+  // Crosshair lines
+  ctx.setLineDash([4, 4]);
+  ctx.strokeStyle = 'rgba(0, 113, 227, 0.25)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(px, pad);
+  ctx.lineTo(px, pad + area);
+  ctx.moveTo(pad, py);
+  ctx.lineTo(pad + area, py);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Position dot with glow
+  ctx.shadowColor = 'rgba(0, 113, 227, 0.35)';
+  ctx.shadowBlur = 10;
+  ctx.beginPath();
+  ctx.arc(px, py, 5, 0, Math.PI * 2);
+  ctx.fillStyle = '#0071e3';
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // White ring
+  ctx.beginPath();
+  ctx.arc(px, py, 5, 0, Math.PI * 2);
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+/* ===== Speed Segments ===== */
+['X', 'Y', 'Z'].forEach(axis => {
+  const container = document.getElementById('speed-' + axis);
+  for (let i = 1; i <= 9; i++) {
+    const seg = document.createElement('div');
+    seg.className = 'speed-seg-item' + (i === 4 ? ' active' : '');
+    seg.textContent = i;
+    seg.onclick = () => {
+      if (!state.connected) return;
+      send(axis + i);
+      state.speed[axis] = i;
+      container.querySelectorAll('.speed-seg-item').forEach((s, idx) => {
+        s.classList.toggle('active', idx + 1 === i);
+      });
+    };
+    container.appendChild(seg);
+  }
+});
+
+/* ===== Move Button Events ===== */
+function setupMoveBtn(id, axis, dir) {
+  const btn = document.getElementById(id);
+  btn.addEventListener('mousedown', () => startMove(axis, dir));
+  btn.addEventListener('mouseup', () => stopMove(axis));
+  btn.addEventListener('mouseleave', () => stopMove(axis));
+  btn.addEventListener('touchstart', e => { e.preventDefault(); startMove(axis, dir); }, { passive: false });
+  btn.addEventListener('touchend', () => stopMove(axis));
+  btn.addEventListener('touchcancel', () => stopMove(axis));
+}
+setupMoveBtn('xb', 'X', 'B');
+setupMoveBtn('xf', 'X', 'F');
+setupMoveBtn('yb', 'Y', 'B');
+setupMoveBtn('yf', 'Y', 'F');
+setupMoveBtn('zf', 'Z', 'B');  // ↑按钮 = 后退 = 物理上升(固件取反)
+setupMoveBtn('zb', 'Z', 'F');  // ↓按钮 = 前进 = 物理下降(固件取反)
+
+/* ===== Keyboard ===== */
+const keyMap = {
+  'd': ['X','F'], 'a': ['X','B'],
+  'ArrowRight': ['Y','F'], 'ArrowLeft': ['Y','B'],
+  'w': ['Z','B'], 's': ['Z','F']  // W=上=后退, S=下=前进(固件取反)
+};
+const keyHeld = {};
+document.addEventListener('keydown', e => {
+  if (!state.connected || keyHeld[e.key]) return;
+  if (e.key === ' ') { e.preventDefault(); send('S'); return; }
+  const m = keyMap[e.key];
+  if (m) { e.preventDefault(); keyHeld[e.key] = true; startMove(m[0], m[1]); }
+});
+document.addEventListener('keyup', e => {
+  const m = keyMap[e.key];
+  if (m) { keyHeld[e.key] = false; stopMove(m[0]); }
+});
+
+/* ===== Log ===== */
+let logOpen = false;
+function toggleLog() {
+  logOpen = !logOpen;
+  document.getElementById('log').classList.toggle('open', logOpen);
+  document.getElementById('logToggle').textContent = logOpen ? '收起' : '展开';
+}
+
+function logMsg(msg, type) {
+  const el = document.getElementById('log');
+  const line = document.createElement('div');
+  if (type === 'tx') { line.className = 'tx'; line.textContent = '→ ' + msg; }
+  else if (type === 'rx') { line.className = 'rx'; line.textContent = '← ' + msg; }
+  else if (type === 'err') { line.className = 'err'; line.textContent = msg; }
+  else { line.className = 'info'; line.textContent = msg; }
+  el.appendChild(line);
+  if (el.children.length > 200) el.removeChild(el.firstChild);
+  el.scrollTop = el.scrollHeight;
+}
+
+/* ===== Init ===== */
+window.addEventListener('load', () => {
+  setupCanvas();
+  renderCanvas();
+});
+window.addEventListener('resize', () => {
+  setupCanvas();
+});
+</script>
+
+</body>
+</html>

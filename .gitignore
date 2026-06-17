@@ -1,0 +1,53 @@
+# macOS
+.DS_Store
+
+# Claude Code 本地设置
+.claude/settings.local.json
+
+# 大型归档/备份（不纳入版本控制）
+*.zip
+
+# 大型数据采集输出
+data-20*/
+
+# 报销凭证（个人敏感信息）
+报销/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Arduino 编译产物
+*.hex
+*.elf
+build/
+
+# grbl-Mega-5X 上游克隆（嵌套 git repo，不入版本控制；改动副本另存）
+firmware/grbl_spike/grbl-Mega-5X/
+tools/spikes/.venv/
+
+# L3 运行时产物（runlog SQLite + 日志）
+runtime/
+
+# pytest-cov 临时产物
+.coverage
+.pytest_cache/
+
+# 外部参考项目（解压后的 PASCAL / AutoSpinmotorSystem 等，不入版本控制）
+Code/
+
+# ===== 迁移防护（2026-06-17 Pi fresh init, Chunk 1）=====
+# 敏感策略/护城河文档：绝不上共享 Pi（正本留 Mac 私有档案，见迁移工作分解 §0.5）
+docs/师兄交接摸底*
+docs/开发环境迁移*
+docs/迁移工作分解*
+导师提问预案*
+PPT修改*
+*.pptx
+# 临时/产物（不入版本控制）
+tmp/
+tools/_stability_logs/
+*.db

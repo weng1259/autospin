@@ -1,0 +1,1205 @@
+{
+  "backends": {
+    "GantryBackend": {
+      "methods": {
+        "close": {
+          "docstring": "",
+          "parameters": {},
+          "returns": "None"
+        },
+        "connect": {
+          "docstring": "",
+          "parameters": {},
+          "returns": "None"
+        },
+        "get_grbl_settings": {
+          "docstring": "读取 grbl `$$` settings dump 的结构化快照。",
+          "parameters": {},
+          "returns": "GrblSettingsSnapshot"
+        },
+        "get_position": {
+          "docstring": "",
+          "parameters": {},
+          "returns": "Position"
+        },
+        "get_status": {
+          "docstring": "返回最近一次快照 —— 不走串口，<1ms 返回。\n\n快照由后台 poller 每 ~200ms 刷新。若从未刷新过（刚 connect 就调用），\n或 poller 刚好拿不到锁，`last_update_ms_ago` 会稍大。",
+          "parameters": {},
+          "returns": "MachineStatus"
+        },
+        "halt": {
+          "docstring": "立刻停止：feedhold `!` + jog cancel `\\x85`。幂等。\n\n因为 `move_to` 用 `$J=` jog 命令（Slice 5），`\\x85` 对运动**真正有效**——\n立即 cancel jog 回 Idle，**保留 is_homed 和 MPos**。PM 按 🛑 停后可以\n直接下一个 move_to，不需要重新归零。\n\n（历史：Slice 3 里 move_to 用的是 G1，`\\x85` 对 G1 无效，halt 后\n会卡在 Hold；Slice 5 改 `$J=` 后这个坑消失。）\n\n返回停止后的快照——正常情况应该是 Idle；若因硬件异常 stuck 在 Hold\n也视为成功（由 `_wait_idle` 的 Hold 特判兜住）。\n\n线程安全：None 检查在锁内做第二次（TOCTOU 防护）。外层 pre-lock 检查\n只是快速失败优化；真正的判定必须在 lock 内，因为另一条线程可能在\n我们等 lock 期间调 `_drop_serial()` 把 `_ser` 置 None。",
+          "parameters": {},
+          "returns": "MachineStatus"
+        },
+        "home": {
+          "docstring": "XYZ 归零。Z 先归（向 +），然后 X+Y 并行（grbl `$44/$45` 配置）。\n\n自动处理 Z 刹车时序：归零开始前释放 CH2，归零完成（或异常）后锁回 CH2。\n`$1=255` 让电机常通电，刹车释放期间 Z 不会掉。\n\n幂等性由 @observable 装饰器接管：同 `idempotency_key` 调用 **24h 内**\n直接返回缓存结果，不重复机械动作。TTL 长是因为归零 30s+ 的物理代价\n≫ 缓存 stale 代价；Agent session 断线重连到同一天前就归过的 key\n必须命中（否则会再归一次，磨损电机 + 刹车）。\n\n### dry_run=True（ADR-004 §原则 7）\n\n返回 `HomePlan`（序列 + 预计时长），**不发任何字节**到串口，不动\nZ 刹车。Agent 可先拿 plan 给人确认再提交真实调用。v0 序列和时长\n都硬编码经验值。\n\nRaises:\n    ConnectionError: 串口未连接或中途掉线（dry_run=True 时不 raise，\n        plan 计算不依赖 connection）\n    AlarmStateError: grbl 报错（含归零失败的 alarm 码）\n    BrakeError: DSTUR-T80 继电器无法操作\n    HomingTimeoutError: 90s 内未完成",
+          "parameters": {
+            "dry_run": {
+              "default": false,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "bool"
+            },
+            "idempotency_key": {
+              "kind": "keyword_only",
+              "required": true,
+              "type": "str"
+            }
+          },
+          "returns": "Union[HomeResult, HomePlan]"
+        },
+        "is_connected": {
+          "docstring": "",
+          "parameters": {},
+          "returns": "bool"
+        },
+        "is_homed": {
+          "docstring": "",
+          "parameters": {},
+          "returns": "bool"
+        },
+        "move_to": {
+          "docstring": "绝对坐标运动（`$J=G90 X.. Y.. Z.. F..` jog 命令）。\n\n**为什么用 `$J=` 不用 `G1`**（Slice 5 回归 ADR-002 §15-18 路线）：\n- `G1` 是铣削 gcode，`!` feedhold 后只能 `~`（继续原 target）或\n  `\\x18`（soft-reset，丢 is_homed）→ halt 后进退两难\n- `$J=` 是 jog 命令，`\\x85` jog-cancel 立即回 Idle，**保留 is_homed\n  和 MPos** → halt 即\"就地刹车\"，可以直接下一个 move_to\n- bCNC / OpenBuilds 都走 `$J=` 路线；cncjs 不用 `$J=` 是我们否决它的\n  核心理由（ADR-002）\n\n流程：\n1. 校验 connect / homed / soft_limits / feed；\n2. 释放 Z 刹车（无论本次是否走 Z）；\n3. 发 `$J=G90 ...`，等 grbl 回 `ok`（命令进 planner，~10ms）；\n4. `wait_for_idle=True` 则轮询快照直到 state==IDLE 或 timeout；\n5. 锁回 Z 刹车；返回 MoveResult。\n\n注：`$J=` 期间 grbl 状态显示为 `Jog` 而非 `Run`，`_wait_idle` 会把\nIdle 当完成（Jog 当运动中）。\n\n### dry_run=True（ADR-004 §原则 7）\n\n返回 `MovePlan` 而不发字节：soft_limits 和 feed 校验仍然执行（plan\n可报告会 raise 的错误让 Agent 提前知道），但**不动机器、不动 Z 刹车**。\n若已 connect+homed，plan 含 current_position / distance / duration 估算；\n未 connect 时这些字段为 None。\n\nRaises:\n    ConnectionError: 仅非 dry-run 时（plan 计算不依赖串口）\n    MachineNotHomedError / SoftLimitExceededError /\n    AlarmStateError / HomingTimeoutError / BrakeError。",
+          "parameters": {
+            "dry_run": {
+              "default": false,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "bool"
+            },
+            "feed_mm_min": {
+              "default": null,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "Optional[float]"
+            },
+            "target": {
+              "kind": "positional_or_keyword",
+              "required": true,
+              "type": "Position"
+            },
+            "timeout_s": {
+              "default": null,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "Optional[float]"
+            },
+            "wait_for_idle": {
+              "default": true,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "bool"
+            }
+          },
+          "returns": "Union[MoveResult, MovePlan]"
+        },
+        "recover_from_alarm": {
+          "docstring": "Alarm / Hold 一键恢复。组合 `soft_reset` + `unlock_alarm` + `home`。\n\n入口状态矩阵（Slice 5 §Q2）：\n- **Alarm** → `\\x18` → (若进 alarm:11) `$X` → `$H`（主路径）\n- **Hold** → `\\x18` → `$X` → `$H`（罕见兜底——`$J=` + `\\x85` 正常\n  halt 会直接回 Idle；只有在 `$J=` 被 grbl reject 或外部客户端发了\n  `!` 时才会 stuck 在 Hold）\n- **Idle** → no-op，立即返回 `actions_taken=[]`（天然幂等）\n- **Run / Jog / Home** → raise `OperationConflictError`（先 halt）\n- **Disconnected** → raise `ConnectionError`（走 Slice 4 「🔌 重新连接」）\n\n幂等：同 `idempotency_key` **24h** 内命中缓存直接返回上次结果（recover\n内部会 home，按 home 的长 TTL 规则。见 observable.py §TTL 分级）。\nAgent session 断线重连到同一天内已恢复过的 key 必须命中，否则会再\n`$H` 归一次零，物理代价不可接受。\n\nRaises:\n    ConnectionError: 串口掉线\n    OperationConflictError: 入口状态是 Run/Jog/Home\n    AlarmStateError / HomingTimeoutError / BrakeError: 内部\n        unlock / home 失败时冒泡；PM 看到具体子错误，再决定下一步。",
+          "parameters": {
+            "idempotency_key": {
+              "kind": "keyword_only",
+              "required": true,
+              "type": "str"
+            },
+            "skip_rehome": {
+              "default": false,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "bool"
+            }
+          },
+          "returns": "RecoveryResult"
+        },
+        "repair_grbl_settings": {
+          "docstring": "把关键 grbl 参数写回仓库定义，并复查。",
+          "parameters": {},
+          "returns": "GrblSettingsValidationResult"
+        },
+        "soft_reset": {
+          "docstring": "发 ctrl-X (`\\x18`) —— grbl firmware 状态机重置。幂等。\n\n副作用（与 AVR reset 不同，AVR 只在 DTR 脉冲时 reset）：\n- grbl planner 清空，motion 立即停\n- machine coordinates 归零（`is_homed` 必须 reset 为 False）\n- alarm 位清除，但若 `$22=1` 会立刻重回 alarm:11（Homing required）\n- 串口 banner 再次打印，约 200-300ms 到达\n\n不重连 DSTUR 刹车（那是独立串口）。后续恢复动作（unlock / home）\n由调用者负责。",
+          "parameters": {},
+          "returns": "None"
+        },
+        "unlock_alarm": {
+          "docstring": "发 `$X` 清 grbl alarm 位。返回清完后的 MachineStatus。幂等。\n\n如果当前不在 Alarm，`$X` 是无害 no-op（grbl 回 ok）。调用后抓一次\n同步快照，返回 alarm 清除后的状态。\n\nRaises:\n    ConnectionError: 串口未连接 / 写入失败\n    AlarmStateError: 极少数情况 grbl 对 `$X` 本身回 error（不该发生）",
+          "parameters": {},
+          "returns": "MachineStatus"
+        },
+        "validate_grbl_settings": {
+          "docstring": "检查关键 grbl 参数是否与仓库定义一致；不一致则抛结构化错误。",
+          "parameters": {},
+          "returns": "GrblSettingsValidationResult"
+        }
+      }
+    },
+    "GripperBackend": {
+      "methods": {
+        "close": {
+          "docstring": "夹紧夹爪——CH{channel}=ON，24V 输出。",
+          "parameters": {
+            "dry_run": {
+              "default": false,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "bool"
+            },
+            "idempotency_key": {
+              "kind": "keyword_only",
+              "required": true,
+              "type": "str"
+            }
+          },
+          "returns": "Union[GripperActionResult, GripperActionPlan]"
+        },
+        "get_state": {
+          "docstring": "",
+          "parameters": {},
+          "returns": "GripperState"
+        },
+        "open": {
+          "docstring": "松开夹爪——CH{channel}=OFF，24V 断开。",
+          "parameters": {
+            "dry_run": {
+              "default": false,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "bool"
+            },
+            "idempotency_key": {
+              "kind": "keyword_only",
+              "required": true,
+              "type": "str"
+            }
+          },
+          "returns": "Union[GripperActionResult, GripperActionPlan]"
+        }
+      }
+    },
+    "RelayBackend": {
+      "methods": {
+        "ch_off": {
+          "docstring": "关闭通道——断 24V 输出。幂等：已 OFF 时 was_noop=True。",
+          "parameters": {
+            "channel": {
+              "kind": "positional_or_keyword",
+              "required": true,
+              "type": "int"
+            },
+            "dry_run": {
+              "default": false,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "bool"
+            },
+            "idempotency_key": {
+              "kind": "keyword_only",
+              "required": true,
+              "type": "str"
+            }
+          },
+          "returns": "Union[RelayActionResult, RelayActionPlan]"
+        },
+        "ch_on": {
+          "docstring": "打开通道——24V 输出到 CH{channel}。幂等：已 ON 时 was_noop=True。",
+          "parameters": {
+            "channel": {
+              "kind": "positional_or_keyword",
+              "required": true,
+              "type": "int"
+            },
+            "dry_run": {
+              "default": false,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "bool"
+            },
+            "idempotency_key": {
+              "kind": "keyword_only",
+              "required": true,
+              "type": "str"
+            }
+          },
+          "returns": "Union[RelayActionResult, RelayActionPlan]"
+        },
+        "close": {
+          "docstring": "",
+          "parameters": {},
+          "returns": "None"
+        },
+        "connect": {
+          "docstring": "打开 DSTUR-T80 串口。不发任何 reset —— 初始 state 信任\"全 OFF\"默认。",
+          "parameters": {},
+          "returns": "None"
+        },
+        "get_state": {
+          "docstring": "快照当前 8 通道状态。不抢 `_write_lock`——写串口时读立即返回。",
+          "parameters": {},
+          "returns": "RelayState"
+        },
+        "is_connected": {
+          "docstring": "",
+          "parameters": {},
+          "returns": "bool"
+        }
+      }
+    }
+  },
+  "enums": {
+    "GripperCommandedState": {
+      "names": [
+        "OPEN",
+        "CLOSED",
+        "UNKNOWN"
+      ],
+      "values": [
+        "open",
+        "closed",
+        "unknown"
+      ]
+    },
+    "MachineState": {
+      "names": [
+        "IDLE",
+        "RUN",
+        "JOG",
+        "HOME",
+        "ALARM",
+        "HOLD",
+        "DISCONNECTED",
+        "UNKNOWN"
+      ],
+      "values": [
+        "idle",
+        "run",
+        "jog",
+        "home",
+        "alarm",
+        "hold",
+        "disconnected",
+        "unknown"
+      ]
+    }
+  },
+  "errors": {
+    "AlarmStateError": {
+      "docstring": "grbl 当前在 ALARM 状态。",
+      "error_code": "L3.ALARM_STATE",
+      "recoverable": true,
+      "severity": "alarm",
+      "suggested_action": "Call unlock_alarm() or home() to recover.",
+      "suggested_action_zh": "点「🔧 清除并恢复」一键 unlock + 重新归零。"
+    },
+    "BrakeError": {
+      "docstring": "Z 轴刹车继电器（DSTUR-T80 CH2）操作失败。",
+      "error_code": "L3.BRAKE",
+      "recoverable": true,
+      "severity": "alarm",
+      "suggested_action": "DSTUR-T80 relay command failed on Z-brake channel; verify the USB serial port exists and is not held by another process.",
+      "suggested_action_zh": "Z 轴刹车继电器命令失败。确认 /dev/cu.usbmodem6670E00119391 存在且没被其它进程占用，再重试。"
+    },
+    "ConnectionError": {
+      "docstring": "USB / 串口连接异常 —— 端口不存在、被占用、运行中突然拔线。",
+      "error_code": "L3.CONNECTION",
+      "recoverable": true,
+      "severity": "alarm",
+      "suggested_action": "Check USB cable and port; reconnect the backend.",
+      "suggested_action_zh": "检查 USB 线和端口占用，然后在 sidebar 点「断开并重连」。"
+    },
+    "GrblConfigMismatchError": {
+      "docstring": "grbl 关键 `$` 参数与仓库定义不一致。",
+      "error_code": "L3.CONFIG_MISMATCH",
+      "recoverable": true,
+      "severity": "alarm",
+      "suggested_action": "Repair grbl settings before attempting motion.",
+      "suggested_action_zh": "grbl 关键参数不一致，请先修复参数再重新归零/运动。"
+    },
+    "HomingTimeoutError": {
+      "docstring": "归零或运动指令在超时窗口内未完成。",
+      "error_code": "L3.HOMING_TIMEOUT",
+      "recoverable": true,
+      "severity": "alarm",
+      "suggested_action": "Homing did not complete; check brake release & sensors.",
+      "suggested_action_zh": "归零/运动超时未完成。检查 Z 刹车（DSTUR CH2）和限位传感器（`$$` 看 `$5=1`），再重试归零。"
+    },
+    "L3Error": {
+      "docstring": "",
+      "error_code": "L3.UNKNOWN",
+      "recoverable": false,
+      "severity": "alarm",
+      "suggested_action": "",
+      "suggested_action_zh": ""
+    },
+    "MachineNotHomedError": {
+      "docstring": "机器未归零，但调用了需要 homed 的方法（move_to 等）。",
+      "error_code": "L3.MACHINE_NOT_HOMED",
+      "recoverable": true,
+      "severity": "warning",
+      "suggested_action": "Call gantry.home() before attempting motion commands.",
+      "suggested_action_zh": "先点「🏠 归零」按钮完成归零，再下运动指令。"
+    },
+    "OperationConflictError": {
+      "docstring": "前一个操作还在执行，新请求被拒绝（Slice 3 移动期间再下指令）。",
+      "error_code": "L3.OPERATION_CONFLICT",
+      "recoverable": true,
+      "severity": "warning",
+      "suggested_action": "Wait for current operation to finish or call halt() first.",
+      "suggested_action_zh": "机器正忙，请先点顶部「🛑 停」或等当前动作完成。"
+    },
+    "RelayCommunicationError": {
+      "docstring": "DSTUR-T80 USB 继电器通信失败——端口不存在、被占用、write 超时、EMI 断联。\n\nPhase 3.3 起的通用继电器错误。Z 轴刹车专用的 `BrakeError` 是它的子类，\n`GantryBackend` 在 Z 刹车路径捕获本错误后包成 `BrakeError` 重新抛出。",
+      "error_code": "L3.RELAY",
+      "recoverable": true,
+      "severity": "alarm",
+      "suggested_action": "DSTUR-T80 command failed; verify USB port and retry; if persistent reconnect the relay backend.",
+      "suggested_action_zh": "继电器命令失败。若单次瞬失可忽略重试；持续失败检查 /dev/cu.usbmodem6670E00119391 存在且没被其它进程占用。"
+    },
+    "SoftLimitExceededError": {
+      "docstring": "请求的目标坐标超过工作空间软限位。",
+      "error_code": "L3.SOFT_LIMIT_EXCEEDED",
+      "recoverable": false,
+      "severity": "warning",
+      "suggested_action": "Target outside work envelope; adjust Position fields.",
+      "suggested_action_zh": "目标超出工作空间（见 sidebar「软限位」），请调整坐标输入。"
+    }
+  },
+  "models": {
+    "GrblSettingMismatch": {
+      "description": "单条 grbl `$` 参数不一致的快照。",
+      "properties": {
+        "actual": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Actual"
+        },
+        "expected": {
+          "title": "Expected",
+          "type": "string"
+        },
+        "key": {
+          "title": "Key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "expected"
+      ],
+      "title": "GrblSettingMismatch",
+      "type": "object"
+    },
+    "GrblSettingsSnapshot": {
+      "description": "grbl 当前 settings dump 的结构化快照。",
+      "properties": {
+        "settings": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Settings",
+          "type": "object"
+        }
+      },
+      "required": [
+        "settings"
+      ],
+      "title": "GrblSettingsSnapshot",
+      "type": "object"
+    },
+    "GrblSettingsValidationResult": {
+      "$defs": {
+        "GrblSettingMismatch": {
+          "description": "单条 grbl `$` 参数不一致的快照。",
+          "properties": {
+            "actual": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Actual"
+            },
+            "expected": {
+              "title": "Expected",
+              "type": "string"
+            },
+            "key": {
+              "title": "Key",
+              "type": "string"
+            }
+          },
+          "required": [
+            "key",
+            "expected"
+          ],
+          "title": "GrblSettingMismatch",
+          "type": "object"
+        },
+        "GrblSettingsSnapshot": {
+          "description": "grbl 当前 settings dump 的结构化快照。",
+          "properties": {
+            "settings": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "title": "Settings",
+              "type": "object"
+            }
+          },
+          "required": [
+            "settings"
+          ],
+          "title": "GrblSettingsSnapshot",
+          "type": "object"
+        }
+      },
+      "description": "grbl settings 检查 / 修复结果。",
+      "properties": {
+        "duration_ms": {
+          "title": "Duration Ms",
+          "type": "number"
+        },
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "mismatches": {
+          "items": {
+            "$ref": "#/$defs/GrblSettingMismatch"
+          },
+          "title": "Mismatches",
+          "type": "array"
+        },
+        "repaired": {
+          "title": "Repaired",
+          "type": "boolean"
+        },
+        "snapshot": {
+          "$ref": "#/$defs/GrblSettingsSnapshot"
+        },
+        "success": {
+          "title": "Success",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "success",
+        "repaired",
+        "mismatches",
+        "snapshot",
+        "duration_ms",
+        "event_id"
+      ],
+      "title": "GrblSettingsValidationResult",
+      "type": "object"
+    },
+    "GripperActionPlan": {
+      "$defs": {
+        "GripperCommandedState": {
+          "description": "夹爪命令状态——backend 记忆的最后一次开合命令。\n\n**不是真实位置**：继电器只控 24V 通断，无位置反馈。真实位置要 RS485\n查（Phase 3.5+ 的 `set_force` / 完整状态查询才引入）。\n\n`UNKNOWN` 用在 connect 前 / 未发任何开合命令的初始态。",
+          "enum": [
+            "open",
+            "closed",
+            "unknown"
+          ],
+          "title": "GripperCommandedState",
+          "type": "string"
+        }
+      },
+      "description": "dry_run 返回。\n\n`underlying_relay_channel` 让调用方看到开合命令底层走的继电器通道\n（默认 CH1），便于 Agent 理解跨 backend 副作用。",
+      "properties": {
+        "current_state": {
+          "$ref": "#/$defs/GripperCommandedState"
+        },
+        "target_state": {
+          "$ref": "#/$defs/GripperCommandedState"
+        },
+        "underlying_relay_channel": {
+          "title": "Underlying Relay Channel",
+          "type": "integer"
+        },
+        "would_activate_relay": {
+          "title": "Would Activate Relay",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "target_state",
+        "current_state",
+        "would_activate_relay",
+        "underlying_relay_channel"
+      ],
+      "title": "GripperActionPlan",
+      "type": "object"
+    },
+    "GripperActionResult": {
+      "$defs": {
+        "GripperCommandedState": {
+          "description": "夹爪命令状态——backend 记忆的最后一次开合命令。\n\n**不是真实位置**：继电器只控 24V 通断，无位置反馈。真实位置要 RS485\n查（Phase 3.5+ 的 `set_force` / 完整状态查询才引入）。\n\n`UNKNOWN` 用在 connect 前 / 未发任何开合命令的初始态。",
+          "enum": [
+            "open",
+            "closed",
+            "unknown"
+          ],
+          "title": "GripperCommandedState",
+          "type": "string"
+        }
+      },
+      "description": "`open()` / `close()` 完成后返回。",
+      "properties": {
+        "commanded_state_after": {
+          "$ref": "#/$defs/GripperCommandedState"
+        },
+        "duration_ms": {
+          "title": "Duration Ms",
+          "type": "number"
+        },
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "success": {
+          "title": "Success",
+          "type": "boolean"
+        },
+        "was_noop": {
+          "title": "Was Noop",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "success",
+        "commanded_state_after",
+        "was_noop",
+        "duration_ms",
+        "event_id"
+      ],
+      "title": "GripperActionResult",
+      "type": "object"
+    },
+    "GripperState": {
+      "$defs": {
+        "GripperCommandedState": {
+          "description": "夹爪命令状态——backend 记忆的最后一次开合命令。\n\n**不是真实位置**：继电器只控 24V 通断，无位置反馈。真实位置要 RS485\n查（Phase 3.5+ 的 `set_force` / 完整状态查询才引入）。\n\n`UNKNOWN` 用在 connect 前 / 未发任何开合命令的初始态。",
+          "enum": [
+            "open",
+            "closed",
+            "unknown"
+          ],
+          "title": "GripperCommandedState",
+          "type": "string"
+        }
+      },
+      "description": "夹爪状态快照。\n\n`position_known` 在 Phase 3.3 永远为 `False`（RS485 未集成）。Phase 3.5\n接 RS485 后会加 `actual_position_mm` 字段并把此标志切到 True；\n保留字段是让 Agent / UI 现在就写好分支逻辑。",
+      "properties": {
+        "commanded_state": {
+          "$ref": "#/$defs/GripperCommandedState"
+        },
+        "last_command_ms_ago": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Command Ms Ago"
+        },
+        "position_known": {
+          "default": false,
+          "title": "Position Known",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "commanded_state"
+      ],
+      "title": "GripperState",
+      "type": "object"
+    },
+    "HomePlan": {
+      "description": "`home(..., dry_run=True)` 返回：归零动作序列 + 预计时长。\n\nv0：序列和时长都是经验值硬编码。Phase 4 若接 recipe 引擎可按当前位置\n优化估算。",
+      "properties": {
+        "estimated_duration_s": {
+          "title": "Estimated Duration S",
+          "type": "number"
+        },
+        "sequence": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Sequence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "sequence",
+        "estimated_duration_s"
+      ],
+      "title": "HomePlan",
+      "type": "object"
+    },
+    "HomeResult": {
+      "$defs": {
+        "Position": {
+          "properties": {
+            "x_mm": {
+              "title": "X Mm",
+              "type": "number"
+            },
+            "y_mm": {
+              "title": "Y Mm",
+              "type": "number"
+            },
+            "z_mm": {
+              "title": "Z Mm",
+              "type": "number"
+            }
+          },
+          "required": [
+            "x_mm",
+            "y_mm",
+            "z_mm"
+          ],
+          "title": "Position",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "duration_ms": {
+          "title": "Duration Ms",
+          "type": "number"
+        },
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "position_after_pulloff": {
+          "$ref": "#/$defs/Position"
+        },
+        "success": {
+          "title": "Success",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "success",
+        "position_after_pulloff",
+        "duration_ms",
+        "event_id"
+      ],
+      "title": "HomeResult",
+      "type": "object"
+    },
+    "MachineStatus": {
+      "$defs": {
+        "MachineState": {
+          "description": "grbl 状态机（`<state>` 字段）。",
+          "enum": [
+            "idle",
+            "run",
+            "jog",
+            "home",
+            "alarm",
+            "hold",
+            "disconnected",
+            "unknown"
+          ],
+          "title": "MachineState",
+          "type": "string"
+        },
+        "Position": {
+          "properties": {
+            "x_mm": {
+              "title": "X Mm",
+              "type": "number"
+            },
+            "y_mm": {
+              "title": "Y Mm",
+              "type": "number"
+            },
+            "z_mm": {
+              "title": "Z Mm",
+              "type": "number"
+            }
+          },
+          "required": [
+            "x_mm",
+            "y_mm",
+            "z_mm"
+          ],
+          "title": "Position",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "alarm_code": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Alarm Code"
+        },
+        "is_homed": {
+          "default": false,
+          "title": "Is Homed",
+          "type": "boolean"
+        },
+        "last_update_ms_ago": {
+          "default": 0.0,
+          "title": "Last Update Ms Ago",
+          "type": "number"
+        },
+        "planner_buffer_free": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Planner Buffer Free"
+        },
+        "position": {
+          "$ref": "#/$defs/Position"
+        },
+        "raw": {
+          "default": "",
+          "title": "Raw",
+          "type": "string"
+        },
+        "rx_buffer_free": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rx Buffer Free"
+        },
+        "state": {
+          "$ref": "#/$defs/MachineState"
+        }
+      },
+      "required": [
+        "state",
+        "position"
+      ],
+      "title": "MachineStatus",
+      "type": "object"
+    },
+    "MovePlan": {
+      "$defs": {
+        "Position": {
+          "properties": {
+            "x_mm": {
+              "title": "X Mm",
+              "type": "number"
+            },
+            "y_mm": {
+              "title": "Y Mm",
+              "type": "number"
+            },
+            "z_mm": {
+              "title": "Z Mm",
+              "type": "number"
+            }
+          },
+          "required": [
+            "x_mm",
+            "y_mm",
+            "z_mm"
+          ],
+          "title": "Position",
+          "type": "object"
+        }
+      },
+      "description": "`move_to(..., dry_run=True)` 返回：预计轨迹 + 时长，**不发任何字节**。\n\n为 Phase 4 旋涂 recipe 做模板（ADR-004 §原则 7）：破坏性操作可由 Agent\n/ UI 先拿 plan 给人审批再 commit。\n\nv0 字段最小集：\n- `target` / `feed_mm_min`：真正会下发的参数（defaults 已解析）\n- `distance_mm`：从 `current_position` 到 target 的欧氏距离；\n  若 backend 未 connect 则 None（拿不到 current）\n- `estimated_duration_s`：distance_mm / (feed/60)；未知距离时 None\n- `current_position`：dry-run 时刻的位置快照；未 connect 时 None",
+      "properties": {
+        "current_position": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Position"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "distance_mm": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Distance Mm"
+        },
+        "estimated_duration_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Estimated Duration S"
+        },
+        "feed_mm_min": {
+          "title": "Feed Mm Min",
+          "type": "number"
+        },
+        "target": {
+          "$ref": "#/$defs/Position"
+        }
+      },
+      "required": [
+        "target",
+        "feed_mm_min"
+      ],
+      "title": "MovePlan",
+      "type": "object"
+    },
+    "MoveResult": {
+      "$defs": {
+        "Position": {
+          "properties": {
+            "x_mm": {
+              "title": "X Mm",
+              "type": "number"
+            },
+            "y_mm": {
+              "title": "Y Mm",
+              "type": "number"
+            },
+            "z_mm": {
+              "title": "Z Mm",
+              "type": "number"
+            }
+          },
+          "required": [
+            "x_mm",
+            "y_mm",
+            "z_mm"
+          ],
+          "title": "Position",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "duration_ms": {
+          "title": "Duration Ms",
+          "type": "number"
+        },
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "final_position": {
+          "$ref": "#/$defs/Position"
+        },
+        "success": {
+          "title": "Success",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "success",
+        "final_position",
+        "duration_ms",
+        "event_id"
+      ],
+      "title": "MoveResult",
+      "type": "object"
+    },
+    "Position": {
+      "properties": {
+        "x_mm": {
+          "title": "X Mm",
+          "type": "number"
+        },
+        "y_mm": {
+          "title": "Y Mm",
+          "type": "number"
+        },
+        "z_mm": {
+          "title": "Z Mm",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x_mm",
+        "y_mm",
+        "z_mm"
+      ],
+      "title": "Position",
+      "type": "object"
+    },
+    "RecoveryResult": {
+      "$defs": {
+        "MachineState": {
+          "description": "grbl 状态机（`<state>` 字段）。",
+          "enum": [
+            "idle",
+            "run",
+            "jog",
+            "home",
+            "alarm",
+            "hold",
+            "disconnected",
+            "unknown"
+          ],
+          "title": "MachineState",
+          "type": "string"
+        },
+        "MachineStatus": {
+          "properties": {
+            "alarm_code": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Alarm Code"
+            },
+            "is_homed": {
+              "default": false,
+              "title": "Is Homed",
+              "type": "boolean"
+            },
+            "last_update_ms_ago": {
+              "default": 0.0,
+              "title": "Last Update Ms Ago",
+              "type": "number"
+            },
+            "planner_buffer_free": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Planner Buffer Free"
+            },
+            "position": {
+              "$ref": "#/$defs/Position"
+            },
+            "raw": {
+              "default": "",
+              "title": "Raw",
+              "type": "string"
+            },
+            "rx_buffer_free": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Rx Buffer Free"
+            },
+            "state": {
+              "$ref": "#/$defs/MachineState"
+            }
+          },
+          "required": [
+            "state",
+            "position"
+          ],
+          "title": "MachineStatus",
+          "type": "object"
+        },
+        "Position": {
+          "properties": {
+            "x_mm": {
+              "title": "X Mm",
+              "type": "number"
+            },
+            "y_mm": {
+              "title": "Y Mm",
+              "type": "number"
+            },
+            "z_mm": {
+              "title": "Z Mm",
+              "type": "number"
+            }
+          },
+          "required": [
+            "x_mm",
+            "y_mm",
+            "z_mm"
+          ],
+          "title": "Position",
+          "type": "object"
+        }
+      },
+      "description": "`recover_from_alarm()` 的返回（Slice 5）。\n\n`entry_state`：进入 recover 时的 MachineState；用于 PM/Agent 事后理解\n这次恢复面对的是什么场景（Alarm / Hold / Idle）。\n`actions_taken`：按执行顺序的 step 名字，例如\n`[\"soft_reset\", \"unlock_alarm\", \"home\"]`；Idle 入口时为空列表。\n`final_status`：恢复后的完整状态快照（含 state / position / is_homed）。",
+      "properties": {
+        "actions_taken": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Actions Taken",
+          "type": "array"
+        },
+        "duration_ms": {
+          "title": "Duration Ms",
+          "type": "number"
+        },
+        "entry_state": {
+          "$ref": "#/$defs/MachineState"
+        },
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "final_status": {
+          "$ref": "#/$defs/MachineStatus"
+        },
+        "success": {
+          "title": "Success",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "success",
+        "entry_state",
+        "actions_taken",
+        "final_status",
+        "duration_ms",
+        "event_id"
+      ],
+      "title": "RecoveryResult",
+      "type": "object"
+    },
+    "RelayActionPlan": {
+      "description": "`ch_on(..., dry_run=True)` / `ch_off(..., dry_run=True)` 返回。",
+      "properties": {
+        "channel": {
+          "title": "Channel",
+          "type": "integer"
+        },
+        "current_state": {
+          "title": "Current State",
+          "type": "boolean"
+        },
+        "target_state": {
+          "title": "Target State",
+          "type": "boolean"
+        },
+        "would_write": {
+          "title": "Would Write",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "channel",
+        "target_state",
+        "current_state",
+        "would_write"
+      ],
+      "title": "RelayActionPlan",
+      "type": "object"
+    },
+    "RelayActionResult": {
+      "description": "`ch_on()` / `ch_off()` 完成后返回。\n\n`was_noop=True` 表示幂等命中——目标 state 已匹配，未实际写串口。这是\nbrake-skip 优化的核心路径：GantryBackend 纯 XY 移动时 Z 刹车已 released，\n`ch_on(2)` 立即 noop 返回，避开 EMI 风险（Issue #025）。",
+      "properties": {
+        "channel": {
+          "title": "Channel",
+          "type": "integer"
+        },
+        "duration_ms": {
+          "title": "Duration Ms",
+          "type": "number"
+        },
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "state_after": {
+          "title": "State After",
+          "type": "boolean"
+        },
+        "success": {
+          "title": "Success",
+          "type": "boolean"
+        },
+        "was_noop": {
+          "title": "Was Noop",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "success",
+        "channel",
+        "state_after",
+        "was_noop",
+        "duration_ms",
+        "event_id"
+      ],
+      "title": "RelayActionResult",
+      "type": "object"
+    },
+    "RelayState": {
+      "description": "DSTUR-T80 USB 继电器 8 通道状态快照。\n\n`channels`：通道号（1-8）→ 是否 ON。True = 24V 输出有效。\n\n**注意**：这是 backend 记忆的\"已下发\"state，**不是**硬件反馈测量——\nDSTUR-T80 协议无状态回读命令。连线松动 / 继电器本身失效不会被发现。\n实际语义：「上次成功 write 的值，假设命令真的生效了」。",
+      "properties": {
+        "channels": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "title": "Channels",
+          "type": "object"
+        },
+        "last_update_ms_ago": {
+          "default": 0.0,
+          "title": "Last Update Ms Ago",
+          "type": "number"
+        }
+      },
+      "required": [
+        "channels"
+      ],
+      "title": "RelayState",
+      "type": "object"
+    }
+  },
+  "version": "1.0"
+}
