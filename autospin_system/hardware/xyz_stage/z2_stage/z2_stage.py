@@ -22,7 +22,7 @@ from typing import Optional
 import serial
 
 try:
-    from AutoSpinmotorSystem.config.hardware_config import CONFIG
+    from autospin_system.config.hardware_config import CONFIG
 except ModuleNotFoundError:  # pragma: no cover - direct-script execution
     from config.hardware_config import CONFIG
 

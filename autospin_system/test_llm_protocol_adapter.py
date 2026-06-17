@@ -1,6 +1,6 @@
 import pytest
 
-from AutoSpinmotorSystem.protocol import (
+from autospin_system.protocol import (
     compile_protocol,
     normalize_llm_json,
     protocol_from_llm_json,

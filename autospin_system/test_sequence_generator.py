@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from AutoSpinmotorSystem.protocol.sequence_generator import (
+from autospin_system.protocol.sequence_generator import (
     ReplacementIndexes,
     generate_multi_round_recipe,
     get_liquid_position,

@@ -9,7 +9,7 @@ PACKAGE_PARENT = Path(__file__).resolve().parent.parent
 if str(PACKAGE_PARENT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_PARENT))
 
-from AutoSpinmotorSystem.maestro import Maestro
+from autospin_system.maestro import Maestro
 
 __test__ = False
 

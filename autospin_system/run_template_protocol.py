@@ -18,8 +18,8 @@ if str(ROOT_DIR) not in sys.path:
     # importing AutoSpinmotorSystem as a package.
     sys.path.insert(0, str(ROOT_DIR))
 
-from AutoSpinmotorSystem.maestro import Maestro
-from AutoSpinmotorSystem.protocol import (
+from autospin_system.maestro import Maestro
+from autospin_system.protocol import (
     ExperimentProtocol,
     compile_protocol,
     load_template,

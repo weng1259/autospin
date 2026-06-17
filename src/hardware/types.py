@@ -12,7 +12,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class MachineState(str, Enum):
@@ -32,6 +32,7 @@ class Position(BaseModel):
     x_mm: float
     y_mm: float
     z_mm: float
+    z2_mm: float = 0.0
 
 
 class MachineStatus(BaseModel):
@@ -39,6 +40,7 @@ class MachineStatus(BaseModel):
     position: Position
     alarm_code: Optional[int] = None
     is_homed: bool = False
+    limit_pins: list[str] = Field(default_factory=list)
     planner_buffer_free: Optional[int] = None
     rx_buffer_free: Optional[int] = None
     raw: str = ""

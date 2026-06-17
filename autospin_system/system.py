@@ -2,7 +2,7 @@
 # 基于 PASCAL 架构的核心系统结构
 
 import itertools as itt
-from config.hardware_config import CONFIG
+from autospin_system.config.hardware_config import CONFIG
 
 from .workers import (
     Worker_GantryGripper,

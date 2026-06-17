@@ -8,7 +8,7 @@ from enum import Enum
 from typing import Tuple, Dict, Any
 
 try:
-    from AutoSpinmotorSystem.config.hardware_config import CONFIG
+    from autospin_system.config.hardware_config import CONFIG
 except ModuleNotFoundError:  # Direct execution from the project root.
     from config.hardware_config import CONFIG
 from .driver_communication import DriverCommunication

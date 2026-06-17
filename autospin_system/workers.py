@@ -9,12 +9,12 @@ from typing import Dict, Any, List, Optional
 import inspect
 
 try:
-    from AutoSpinmotorSystem.config.hardware_config import CONFIG
+    from autospin_system.config.hardware_config import CONFIG
 except ImportError:
     from config.hardware_config import CONFIG
 
 # 【修改点 1：引入统一的 YAML 配置字典】
-from config.hardware_config import CONFIG
+from autospin_system.config.hardware_config import CONFIG
 
 # 定义任务的标准格式，包含执行函数、预估时长及协作 Worker 列表
 task_tuple = namedtuple("task", ["function", "estimated_duration", "other_workers"])

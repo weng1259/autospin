@@ -2,7 +2,7 @@
 
 This module keeps the public ``XYZStage`` shape used by the existing
 ``Maestro``/workers code, while delegating real motion control to the bundled
-grbl L3 backend in ``hardware.xyz_stage.l3_backend``.
+grbl L3 backend in ``src.hardware``.
 
 In ``mock=True`` mode no serial port is opened and all motion is simulated in
 memory. In real mode the wrapped backend provides homing, jog based absolute
@@ -17,7 +17,7 @@ import uuid
 from typing import Any, Dict, Optional
 
 try:  # Support both package and direct-script execution.
-    from AutoSpinmotorSystem.config.hardware_config import CONFIG
+    from autospin_system.config.hardware_config import CONFIG
 except ModuleNotFoundError:  # pragma: no cover - exercised by local scripts
     from config.hardware_config import CONFIG
 
@@ -84,10 +84,10 @@ class XYZStage:
         Lazy loading keeps ``mock=True`` usable even on a machine where optional
         serial/hardware dependencies have not been installed yet.
         """
-        from .l3_backend.hardware.errors import L3Error
-        from .l3_backend.hardware.gantry_backend import GantryBackend
-        from .l3_backend.hardware.relay_backend import RelayBackend
-        from .l3_backend.hardware.types import Position
+        from src.hardware.errors import L3Error
+        from src.hardware.gantry_backend import GantryBackend
+        from src.hardware.relay_backend import RelayBackend
+        from src.hardware.types import Position
 
         return GantryBackend, RelayBackend, Position, L3Error
 

@@ -12,7 +12,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from AutoSpinmotorSystem.protocol.sequence_generator import (
+from autospin_system.protocol.sequence_generator import (
     DEFAULT_LAYOUT,
     DEFAULT_REPLACEMENT_INDEXES,
     ReplacementIndexes,
@@ -170,13 +170,13 @@ def ask_yes_no(prompt: str, *, default: bool) -> bool:
 def run_generated_recipe(args: argparse.Namespace) -> None:
     """Run the generated low-level recipe using the example experiment runner."""
 
-    from AutoSpinmotorSystem.example_experiment import (
+    from autospin_system.example_experiment import (
         EmergencyStopRequested,
         ExperimentRunner,
         KeyboardEmergencyStopMonitor,
         load_recipe as load_experiment_recipe,
     )
-    from AutoSpinmotorSystem.maestro import Maestro
+    from autospin_system.maestro import Maestro
 
     real_requested = args.real_run or not AUTO_RUN_MOCK
     mock = not real_requested

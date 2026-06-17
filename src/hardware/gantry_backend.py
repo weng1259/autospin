@@ -108,10 +108,14 @@ GRBL_EXPECTED_SETTINGS: dict[str, str] = {
 STATUS_REGEX = re.compile(
     r"<(?P<state>[A-Za-z]+)(?::\d+)?"
     r"\|(?:MPos|WPos):(?P<mx>-?[\d.]+),(?P<my>-?[\d.]+),(?P<mz>-?[\d.]+)"
+    r"(?:,(?P<ma>-?[\d.]+))?"
     r"(?:\|Bf:(?P<bf_planner>\d+),(?P<bf_rx>\d+))?"
     r".*?>"
 )
 ALARM_REGEX = re.compile(r"ALARM:(\d+)")
+LIMIT_PINS_REGEX = re.compile(r"(?:^|\|)Pn:(?P<pins>[A-Za-z]+)(?:\||>)")
+Z2_MIN_MM = 0.0
+Z2_MAX_MM = 125.0
 
 
 def _now_ms() -> float:
@@ -143,12 +147,15 @@ class GantryBackend:
         self._sline: list[str] = []
         self._status = MachineStatus(
             state=MachineState.DISCONNECTED,
-            position=Position(x_mm=0.0, y_mm=0.0, z_mm=0.0),
+            position=Position(x_mm=0.0, y_mm=0.0, z_mm=0.0, z2_mm=0.0),
         )
         self._status_ts_ms: float = 0.0
         self._is_homed: bool = False
         self._alarm_code: Optional[int] = None
         self._last_home_ts_ms: Optional[float] = None
+        self._z2_initialized: bool = False
+        self._manual_mode: bool = False
+        self._pre_manual_step_idle_delay: Optional[str] = None
         # RelayBackend 共享给可能的 GripperBackend（CH1 夹爪 + CH2 Z 刹车同一 DSTUR-T80）。
         # 调用方如果已构造了 RelayBackend 给 GripperBackend 用，传进来让 GantryBackend 复用。
         self._relay: RelayBackend = relay if relay is not None else RelayBackend()
@@ -164,6 +171,7 @@ class GantryBackend:
         # halt() 置位；_wait_idle 碰到 HOLD 状态时当成终点优雅退出。
         # 开新 move_to 前会清零。
         self._halt_requested = False
+        self._abort_requested = threading.Event()
 
     # ── lifecycle ──
 
@@ -249,6 +257,227 @@ class GantryBackend:
     def is_homed(self) -> bool:
         return self._is_homed
 
+    def _require_connected(self, action: str) -> None:
+        if self._ser is None:
+            raise L3ConnectionError(
+                human_message="串口未连接",
+                agent_message=f"{action}: GantryBackend not connected.",
+            )
+
+    def _assert_z2_target(self, z2_mm: float) -> None:
+        if not (Z2_MIN_MM <= z2_mm <= Z2_MAX_MM):
+            raise L3Error(
+                human_message=(
+                    f"Z2 = {z2_mm} 超出安全行程 [{Z2_MIN_MM}, {Z2_MAX_MM}] mm"
+                ),
+                agent_message=(
+                    f"Z2 target {z2_mm} mm outside safe range "
+                    f"[{Z2_MIN_MM}, {Z2_MAX_MM}]; command not sent."
+                ),
+            )
+
+    def initialize_z2_at_top(self) -> MachineStatus:
+        """Declare the current no-limit Z2 position as A0/top.
+
+        Z2 currently has no HOME sensor. This method must only be called when
+        the slide is physically at the top safe position.
+        It intentionally keeps `$22=1` so normal XYZ homing via `$H` remains
+        enabled; A/Z2 is handled by `G92 A0` plus software limits, not by
+        grbl homing.
+        """
+        self._require_connected("initialize_z2_at_top")
+        self._send_line_blocking(
+            "$X\n",
+            timeout_s=3.0,
+            timeout_msg="$X 未在 3s 内返回 ok",
+        )
+        self._send_line_blocking(
+            "$20=0\n",
+            timeout_s=3.0,
+            timeout_msg="$20=0 未在 3s 内返回 ok",
+        )
+        self._send_line_blocking(
+            "$21=0\n",
+            timeout_s=3.0,
+            timeout_msg="$21=0 未在 3s 内返回 ok",
+        )
+        self._send_line_blocking(
+            "$22=1\n",
+            timeout_s=3.0,
+            timeout_msg="$22=1 未在 3s 内返回 ok",
+        )
+        self._send_line_blocking(
+            "G92 A0\n",
+            timeout_s=3.0,
+            timeout_msg="G92 A0 未在 3s 内返回 ok",
+        )
+        self._z2_initialized = True
+        try:
+            self._poll_status_sync(timeout_s=1.0)
+        except Exception:
+            pass
+        return self.get_status()
+
+    def declare_z2_position(self, z2_mm: float) -> MachineStatus:
+        """Declare the current no-limit Z2 position as an absolute A coordinate.
+
+        This is for recovery/calibration after Z2 was moved outside this web
+        controller. It sends `G92 A...` only; it does not move the A/Z2 axis.
+        """
+        target = float(z2_mm)
+        self._require_connected("declare_z2_position")
+        self._assert_z2_target(target)
+        self._send_line_blocking(
+            "$X\n",
+            timeout_s=3.0,
+            timeout_msg="$X did not return ok within 3s",
+        )
+        self._send_line_blocking(
+            f"G92 A{target:.3f}\n",
+            timeout_s=3.0,
+            timeout_msg=f"G92 A{target:.3f} did not return ok within 3s",
+        )
+        self._z2_initialized = True
+        try:
+            self._poll_status_sync(timeout_s=1.0)
+        except Exception:
+            pass
+        return self.get_status()
+
+    def move_z2_to(
+        self,
+        z2_mm: float,
+        *,
+        feed_mm_min: float = 100.0,
+        timeout_s: float = 30.0,
+    ) -> MachineStatus:
+        """Move the added Z2 rail as grbl A axis, using absolute A coordinates."""
+        self._require_connected("move_z2_to")
+        if self._manual_mode:
+            raise L3Error(
+                human_message="导轨处于人工模式，请先退出人工模式再移动 Z2",
+                agent_message="move_z2_to rejected because manual mode is active.",
+            )
+        self._assert_z2_target(float(z2_mm))
+        if feed_mm_min <= 0:
+            raise L3Error(
+                human_message=f"Z2 进给速度 {feed_mm_min} 必须为正数",
+                agent_message=f"feed_mm_min={feed_mm_min} is not positive.",
+            )
+        if not self._z2_initialized:
+            raise L3Error(
+                human_message="Z2 尚未初始化 A0，请先确认滑台在最高点并调用 initialize_z2_at_top()",
+                agent_message="Z2 origin unknown; call initialize_z2_at_top() before motion.",
+            )
+
+        self._send_line_blocking(
+            "G90\n",
+            timeout_s=3.0,
+            timeout_msg="G90 未在 3s 内返回 ok",
+        )
+        self._send_line_blocking(
+            f"G0 A{float(z2_mm):.3f} F{float(feed_mm_min):.0f}\n",
+            timeout_s=max(5.0, timeout_s),
+            timeout_msg=f"Z2 移动未在 {timeout_s}s 内 ack",
+        )
+        self._wait_idle(timeout_s=timeout_s)
+        try:
+            self._poll_status_sync(timeout_s=1.0)
+        except Exception:
+            pass
+        return self.get_status()
+
+    def move_z2_rel(
+        self,
+        dz2_mm: float,
+        *,
+        feed_mm_min: float = 100.0,
+        timeout_s: float = 30.0,
+    ) -> MachineStatus:
+        current = self.get_status().position.z2_mm
+        return self.move_z2_to(
+            current + float(dz2_mm),
+            feed_mm_min=feed_mm_min,
+            timeout_s=timeout_s,
+        )
+
+    def park_z2(self, *, feed_mm_min: float = 100.0) -> MachineStatus:
+        return self.move_z2_to(Z2_MIN_MM, feed_mm_min=feed_mm_min)
+
+    def manual_jog_rel(
+        self,
+        dx_mm: float = 0.0,
+        dy_mm: float = 0.0,
+        dz_mm: float = 0.0,
+        *,
+        feed_mm_min: float = 300.0,
+        timeout_s: float = 15.0,
+    ) -> MachineStatus:
+        """Small unhomed recovery jog for moving away from limit switches.
+
+        This intentionally bypasses homed-state and work-envelope checks, so it
+        is only for manual recovery after halt/alarm. It never moves A/Z2.
+        """
+        self._require_connected("manual_jog_rel")
+        if self._manual_mode:
+            raise L3Error(
+                human_message="导轨处于人工模式，请先退出人工模式再点动",
+                agent_message="manual_jog_rel rejected because manual mode is active.",
+            )
+        deltas = (float(dx_mm), float(dy_mm), float(dz_mm))
+        if all(abs(v) < 1e-9 for v in deltas):
+            return self.get_status()
+        if any(abs(v) > 20.0 for v in deltas):
+            raise L3Error(
+                human_message="手动脱困单次点动不能超过 20 mm",
+                agent_message=f"manual_jog_rel delta too large: {deltas}",
+            )
+        feed = float(feed_mm_min)
+        if not (0 < feed <= 600.0):
+            raise L3Error(
+                human_message="手动脱困速度必须在 (0, 600] mm/min",
+                agent_message=f"manual_jog_rel feed_mm_min={feed} outside (0, 600].",
+            )
+
+        axes: list[str] = []
+        for axis, delta in (("X", deltas[0]), ("Y", deltas[1]), ("Z", deltas[2])):
+            if abs(delta) >= 1e-9:
+                axes.append(f"{axis}{delta:.3f}")
+
+        self.unlock_alarm()
+        self._release_brake()
+        try:
+            self._send_line_blocking(
+                "G91\n",
+                timeout_s=3.0,
+                timeout_msg="G91 未在 3s 内返回 ok",
+            )
+            self._send_line_blocking(
+                f"G0 {' '.join(axes)} F{feed:.0f}\n",
+                timeout_s=max(5.0, timeout_s),
+                timeout_msg="手动脱困点动未在限定时间内 ack",
+            )
+            self._wait_idle(timeout_s=timeout_s)
+        finally:
+            try:
+                self._send_line_blocking(
+                    "G90\n",
+                    timeout_s=3.0,
+                    timeout_msg="G90 未在 3s 内返回 ok",
+                )
+            finally:
+                try:
+                    self._lock_brake()
+                except BrakeError:
+                    pass
+
+        try:
+            self._poll_status_sync(timeout_s=1.0)
+        except Exception:
+            pass
+        return self.get_status()
+
+    # ── Z 刹车封装（Phase 3.3 起走 RelayBackend）──
     def get_grbl_settings(self) -> GrblSettingsSnapshot:
         """读取 grbl `$$` settings dump 的结构化快照。"""
         return GrblSettingsSnapshot(settings=self._query_grbl_settings())
@@ -351,6 +580,99 @@ class GantryBackend:
         # EMI grace period：防 lock → 立即 release 的瞬间切换扰动限位传感器
         time.sleep(_BRAKE_LOCK_GRACE_S)
 
+    def set_z_brake_released(self, released: bool) -> MachineStatus:
+        """Manual Z brake control. True releases CH2, False locks CH2."""
+        self._require_connected("set_z_brake_released")
+        if released:
+            self._release_brake()
+        else:
+            self._lock_brake()
+        try:
+            self._poll_status_sync(timeout_s=0.5)
+        except Exception:
+            pass
+        return self.get_status()
+
+    def enter_manual_mode(
+        self,
+        *,
+        release_xy: bool = True,
+        release_z: bool = False,
+    ) -> MachineStatus:
+        """Enter human handoff mode.
+
+        The hardware does not expose reliable per-axis stepper disable across
+        all grbl-Mega builds, so this uses the conservative path: stop motion,
+        lock the Z brake, then shorten grbl's step idle delay so the steppers
+        release. Z remains mechanically locked.
+        """
+        self._require_connected("enter_manual_mode")
+        if release_z:
+            raise L3Error(
+                human_message="人工模式不允许释放 Z/Z2 垂直轴",
+                agent_message=(
+                    "enter_manual_mode(release_z=True) rejected; vertical axes "
+                    "must remain locked unless dedicated safety hardware exists."
+                ),
+            )
+
+        try:
+            status = self.get_status()
+            if status.state in (MachineState.RUN, MachineState.JOG, MachineState.HOME):
+                self.halt()
+        except L3Error:
+            raise
+        except Exception:
+            pass
+
+        self._lock_brake()
+
+        if release_xy:
+            if self._pre_manual_step_idle_delay is None:
+                try:
+                    settings = self._read_grbl_settings(timeout_s=3.0)
+                    self._pre_manual_step_idle_delay = settings.get("$1", "255")
+                except Exception:
+                    self._pre_manual_step_idle_delay = "255"
+            self._send_line_blocking(
+                "$1=25\n",
+                timeout_s=3.0,
+                timeout_msg="$1=25 did not return ok within 3s",
+            )
+            time.sleep(0.05)
+
+        self._manual_mode = True
+        self._is_homed = False
+        try:
+            self._poll_status_sync(timeout_s=0.5)
+        except Exception:
+            pass
+        return self.get_status()
+
+    def exit_manual_mode(self, *, rehome: bool = True) -> MachineStatus:
+        """Leave human handoff mode and restore the pre-handoff motor policy."""
+        self._require_connected("exit_manual_mode")
+
+        restore_value = self._pre_manual_step_idle_delay or "255"
+        self._send_line_blocking(
+            f"$1={restore_value}\n",
+            timeout_s=3.0,
+            timeout_msg=f"$1={restore_value} did not return ok within 3s",
+        )
+        self._pre_manual_step_idle_delay = None
+        self._manual_mode = False
+
+        if rehome:
+            result = self.home(idempotency_key=f"manual-exit-home-{uuid.uuid4().hex}")
+            if isinstance(result, HomeResult):
+                return self.get_status()
+
+        try:
+            self._poll_status_sync(timeout_s=0.5)
+        except Exception:
+            pass
+        return self.get_status()
+
     # ── actions ──
 
     @observable(idempotency_ttl_s=24 * 3600)  # home 是"高物理代价 + 长耗时"动作：断线重连后必须命中当日缓存
@@ -418,8 +740,12 @@ class GantryBackend:
         self._alarm_code = None
         self._last_home_ts_ms = _now_ms()
 
-        # 归零后拉一次同步快照，避免 poller 还没跑到
-        self._poll_status_sync(timeout_s=1.0)
+        # 归零后拉一次同步快照，避免 poller 还没跑到。这个刷新不是归零动作本身，
+        # 串口偶发写超时时不应把已经完成的 $H 标记为失败。
+        try:
+            self._poll_status_sync(timeout_s=1.0)
+        except (serial.SerialException, OSError):
+            pass
         final_pos = self._status.position
         return HomeResult(
             success=True,
@@ -470,6 +796,12 @@ class GantryBackend:
             MachineNotHomedError / SoftLimitExceededError /
             AlarmStateError / HomingTimeoutError / BrakeError。
         """
+        if self._manual_mode and not dry_run:
+            raise L3Error(
+                human_message="导轨处于人工模式，请先退出人工模式并重新归零",
+                agent_message="move_to rejected because manual mode is active.",
+            )
+
         # 无论 dry-run 都校验 soft_limits 和 feed —— 这样 dry-run 能提前暴露
         # Agent 后续真实调用会出的 SoftLimitExceededError / 进给错
         feed = feed_mm_min if feed_mm_min is not None else self.config.motion.default_feed_mm_min
@@ -628,6 +960,48 @@ class GantryBackend:
         # 超时：返回现状，不抛错（halt 本身应永远"成功"）
         return self.get_status()
 
+    def abort_motion_immediate(self) -> MachineStatus:
+        """Best-effort immediate abort for homing or wedged motion.
+
+        Unlike `halt()`, this does not wait for `_lock`. Homing `$H` is not a
+        jog command, so feedhold/jog-cancel may not stop it quickly enough; grbl
+        soft-reset (`Ctrl-X`) is the reliable emergency escape.
+        """
+        if self._ser is None:
+            raise L3ConnectionError(
+                human_message="串口未连接，无法急停",
+                agent_message="abort_motion_immediate: GantryBackend not connected.",
+            )
+        self._abort_requested.set()
+        self._halt_requested = True
+        try:
+            self._ser.write(b"\x18")
+            self._ser.flush()
+        except (serial.SerialException, OSError) as e:
+            self._drop_serial()
+            raise L3ConnectionError(
+                human_message=f"串口急停写入失败：{e}",
+                agent_message=f"abort_motion_immediate write failed: {e!r}",
+            ) from e
+        self._is_homed = False
+        self._alarm_code = None
+        try:
+            self._lock_brake()
+        except Exception:
+            pass
+        time.sleep(0.3)
+        try:
+            self._ser.reset_input_buffer()
+        except Exception:
+            pass
+        self._cline.clear()
+        self._sline.clear()
+        try:
+            self._poll_status_sync(timeout_s=0.5)
+        except Exception:
+            pass
+        return self.get_status()
+
     @observable
     def soft_reset(self) -> None:
         """发 ctrl-X (`\\x18`) —— grbl firmware 状态机重置。幂等。
@@ -710,6 +1084,58 @@ class GantryBackend:
         except Exception:
             pass
         return self.get_status()
+
+    def get_homing_diagnostics(self) -> dict[str, object]:
+        """Read-only homing diagnostics for ALARM:8 style failures.
+
+        This sends `?` and `$$` only. It does not change grbl settings or move
+        the machine.
+        """
+        if self._ser is None:
+            raise L3ConnectionError(
+                human_message="串口未连接，无法读取归零诊断",
+                agent_message="get_homing_diagnostics: GantryBackend not connected.",
+            )
+
+        try:
+            self._poll_status_sync(timeout_s=1.0)
+        except Exception:
+            pass
+        status = self.get_status()
+        settings = self._read_grbl_settings()
+        homing_settings = {
+            key: settings[key]
+            for key in ("$5", "$22", "$23", "$24", "$25", "$26", "$27")
+            if key in settings
+        }
+        limit_pins = list(status.limit_pins)
+        checks: list[str] = []
+        if limit_pins:
+            checks.append(
+                "当前限位输入仍触发: "
+                + "".join(limit_pins)
+                + "；先手动离开限位，再检查 $5 限位反相。若 A 没有限位，需让 A 限位输入保持未触发或从固件归零循环中移除。"
+            )
+        else:
+            checks.append("当前 ? 状态没有 Pn:X/Y/Z/A，限位输入未持续触发。")
+        if homing_settings.get("$22") != "1":
+            checks.append("$22 不是 1，$H 会被 grbl 拒绝；应先启用 homing。")
+        if "$27" in homing_settings:
+            try:
+                pull_off = float(homing_settings["$27"])
+                if pull_off < 3.0:
+                    checks.append(
+                        f"$27={pull_off:g}mm 偏小；ALARM:8 时建议试 3-5mm。"
+                    )
+            except ValueError:
+                pass
+        checks.append("若归零方向不对，检查 $23；若限位极性不对，检查 $5。")
+        return {
+            "status": status,
+            "limit_pins": limit_pins,
+            "settings": homing_settings,
+            "checks": checks,
+        }
 
     @observable(idempotency_ttl_s=24 * 3600)  # recover 内部会 home，同 home 的 TTL 理由
     def recover_from_alarm(
@@ -1066,20 +1492,70 @@ class GantryBackend:
             state = MachineState.UNKNOWN
         bf_planner = m.group("bf_planner")
         bf_rx = m.group("bf_rx")
+        ma = m.group("ma")
+        limit_pins = self._parse_limit_pins(raw)
         self._status = MachineStatus(
             state=state,
             position=Position(
                 x_mm=float(m.group("mx")),
                 y_mm=float(m.group("my")),
                 z_mm=float(m.group("mz")),
+                z2_mm=float(ma) if ma is not None else self._status.position.z2_mm,
             ),
             alarm_code=self._alarm_code,
             is_homed=self._is_homed,
+            limit_pins=limit_pins,
             planner_buffer_free=int(bf_planner) if bf_planner else None,
             rx_buffer_free=int(bf_rx) if bf_rx else None,
             raw=raw,
         )
         self._status_ts_ms = _now_ms()
+
+    def _parse_limit_pins(self, raw: str) -> list[str]:
+        m = LIMIT_PINS_REGEX.search(raw)
+        if not m:
+            return []
+        return [pin for pin in ("X", "Y", "Z", "A") if pin in m.group("pins").upper()]
+
+    def _read_grbl_settings(self, timeout_s: float = 3.0) -> dict[str, str]:
+        assert self._ser is not None
+        settings: dict[str, str] = {}
+        with self._lock:
+            if self._ser is None:
+                raise L3ConnectionError(
+                    human_message="串口在读取 $$ 前被关闭",
+                    agent_message="_read_grbl_settings: serial is None inside lock.",
+                )
+            deadline = time.time() + timeout_s
+            try:
+                self._ser.write(b"$$\n")
+                self._ser.flush()
+            except (serial.SerialException, OSError) as e:
+                self._drop_serial()
+                raise L3ConnectionError(
+                    human_message=f"串口写入失败：{e}",
+                    agent_message=f"Serial write failed while reading $$: {e!r}",
+                ) from e
+
+            while time.time() < deadline:
+                raw = self._ser.readline().decode("ascii", "ignore").strip()
+                if not raw:
+                    continue
+                if raw.startswith("<"):
+                    self._parse_status_line(raw)
+                    continue
+                if raw.lower() == "ok":
+                    return settings
+                if raw.startswith("$") and "=" in raw:
+                    key, value = raw.split("=", 1)
+                    settings[key] = value
+                    continue
+                if "error:" in raw.lower() or "ALARM:" in raw:
+                    raise self._make_alarm_error(raw, "$$")
+        raise HomingTimeoutError(
+            human_message="读取 grbl $$ 参数超时",
+            agent_message="Timed out waiting for grbl $$ response.",
+        )
 
     # bCNC char-counting helpers ────────────────────────────────────────
 
@@ -1105,6 +1581,14 @@ class GantryBackend:
                 )
             deadline = time.time() + timeout_s
             while sum(self._cline) + len(line) > RX_BUFFER_SIZE:
+                if self._abort_requested.is_set():
+                    self._abort_requested.clear()
+                    self._cline.clear()
+                    self._sline.clear()
+                    raise HomingTimeoutError(
+                        human_message="操作已被急停中断",
+                        agent_message=f"Command {line.rstrip()!r} aborted by emergency stop.",
+                    )
                 if time.time() > deadline:
                     raise HomingTimeoutError(
                         human_message="grbl RX buffer 长时间满，无法发命令",
@@ -1129,6 +1613,14 @@ class GantryBackend:
             self._sline.append(target)
 
             while self._sline and self._sline[0] == target:
+                if self._abort_requested.is_set():
+                    self._abort_requested.clear()
+                    self._cline.clear()
+                    self._sline.clear()
+                    raise HomingTimeoutError(
+                        human_message="操作已被急停中断",
+                        agent_message=f"Command {target!r} aborted by emergency stop.",
+                    )
                 if time.time() > deadline:
                     # 主动尝试取消正在进行的归零
                     try:
@@ -1168,18 +1660,46 @@ class GantryBackend:
             errline = self._sline.pop(0) if self._sline else "<unknown>"
             if self._cline:
                 self._cline.pop(0)
-            m = ALARM_REGEX.search(raw)
-            self._alarm_code = int(m.group(1)) if m else None
-            self._status = self._status.model_copy(
-                update={
-                    "state": MachineState.ALARM,
-                    "alarm_code": self._alarm_code,
-                }
-            )
-            raise AlarmStateError(
-                human_message=f"grbl 报错：{raw}（命令 {errline}）",
+            raise self._make_alarm_error(raw, errline)
+
+    def _make_alarm_error(self, raw: str, errline: str) -> AlarmStateError:
+        m = ALARM_REGEX.search(raw)
+        self._alarm_code = int(m.group(1)) if m else None
+        self._status = self._status.model_copy(
+            update={
+                "state": MachineState.ALARM,
+                "alarm_code": self._alarm_code,
+                "raw": raw,
+            }
+        )
+        if self._alarm_code == 8:
+            pins = "".join(self._status.limit_pins) or "无"
+            exc = AlarmStateError(
+                human_message=(
+                    "grbl 归零失败：ALARM:8。通常是归零后 pull-off 没有释放限位；"
+                    f"当前限位触发={pins}。请先 $X 解锁，手动离开限位，发送 ? 确认无 Pn:X/Y/Z/A，"
+                    "再检查 $5 限位反相、$23 归零方向、$27 pull-off 距离；若 A 没有限位，"
+                    "需让 A 限位输入保持未触发或从固件归零循环中移除。"
+                ),
                 agent_message=(
-                    f"grbl returned {raw!r} for {errline!r}; "
-                    f"alarm_code={self._alarm_code}."
+                    f"grbl returned {raw!r} for {errline!r}; alarm_code=8. "
+                    "Homing failed because limit switch did not clear after pull-off. "
+                    f"Current limit_pins={self._status.limit_pins}. Check $5, $23, $27; "
+                    "if A has no switch, keep A limit input inactive or remove A from homing."
                 ),
             )
+            exc.suggested_action_zh = (
+                "ALARM:8：先 $X，手动离开限位，? 确认没有 Pn:X/Y/Z/A；"
+                "再查 $5/$23/$27。若 A 没有限位，处理 A 限位输入或固件归零循环。"
+            )
+            exc.suggested_action = (
+                "ALARM:8: unlock, move off switches, confirm no Pn pins, then check $5/$23/$27 and A homing input."
+            )
+            return exc
+        return AlarmStateError(
+            human_message=f"grbl 报错：{raw}（命令 {errline}）",
+            agent_message=(
+                f"grbl returned {raw!r} for {errline!r}; "
+                f"alarm_code={self._alarm_code}."
+            ),
+        )

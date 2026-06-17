@@ -40,11 +40,11 @@ ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from config.hardware_config import CONFIG
-from hardware.spin_motor.motor_controller import MotorController
-from hardware.xyz_stage.l3_backend.hardware.gripper_backend import GripperBackend
-from hardware.xyz_stage.l3_backend.hardware.relay_backend import RelayBackend
-from hardware.xyz_stage.xyz_stage import XYZStage
+from autospin_system.config.hardware_config import CONFIG
+from autospin_system.hardware.spin_motor.motor_controller import MotorController
+from src.hardware.gripper_backend import GripperBackend
+from src.hardware.relay_backend import RelayBackend
+from autospin_system.hardware.xyz_stage.xyz_stage import XYZStage
 
 
 LOG = logging.getLogger("full-linkage-sequence")

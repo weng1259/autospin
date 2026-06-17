@@ -1,5 +1,5 @@
 import logging
-from maestro import Maestro
+from autospin_system.maestro import Maestro
 
 __test__ = False
 

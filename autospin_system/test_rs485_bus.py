@@ -22,10 +22,10 @@ PACKAGE_PARENT = Path(__file__).resolve().parent.parent
 if str(PACKAGE_PARENT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_PARENT))
 
-from AutoSpinmotorSystem.config.hardware_config import CONFIG
-from AutoSpinmotorSystem.hardware.pipette import PipetteController, PipetteDriver
-from AutoSpinmotorSystem.hardware.pipette.pipette_controller import Registers as PipetteRegisters
-from AutoSpinmotorSystem.hardware.spin_motor import DriverCommunication, MotorController
+from autospin_system.config.hardware_config import CONFIG
+from autospin_system.hardware.pipette import PipetteController, PipetteDriver
+from autospin_system.hardware.pipette.pipette_controller import Registers as PipetteRegisters
+from autospin_system.hardware.spin_motor import DriverCommunication, MotorController
 
 
 LOGGER = logging.getLogger("rs485_bus_test")

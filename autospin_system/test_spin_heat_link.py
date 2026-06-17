@@ -27,7 +27,7 @@ PACKAGE_PARENT = Path(__file__).resolve().parent.parent
 if str(PACKAGE_PARENT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_PARENT))
 
-from AutoSpinmotorSystem.config.hardware_config import CONFIG
+from autospin_system.config.hardware_config import CONFIG
 
 
 # ---- Safety/test profile -------------------------------------------------

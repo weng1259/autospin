@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from AutoSpinmotorSystem.example_experiment import ExperimentRunner
+from autospin_system.example_experiment import ExperimentRunner
 
 
 class FakeGantry:

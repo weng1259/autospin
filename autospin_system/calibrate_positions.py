@@ -24,8 +24,8 @@ PACKAGE_PARENT = ROOT.parent
 if str(PACKAGE_PARENT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_PARENT))
 
-from AutoSpinmotorSystem.config.hardware_config import CONFIG
-from AutoSpinmotorSystem.hardware.xyz_stage.xyz_stage import XYZStage
+from autospin_system.config.hardware_config import CONFIG
+from autospin_system.hardware.xyz_stage.xyz_stage import XYZStage
 
 
 LOG = logging.getLogger("PositionLocator")

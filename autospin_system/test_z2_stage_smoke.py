@@ -14,7 +14,7 @@ PACKAGE_PARENT = Path(__file__).resolve().parent.parent
 if str(PACKAGE_PARENT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_PARENT))
 
-from AutoSpinmotorSystem.hardware.xyz_stage.z2_stage import Z2Stage
+from autospin_system.hardware.xyz_stage.z2_stage import Z2Stage
 
 
 __test__ = False

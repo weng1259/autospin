@@ -5,7 +5,7 @@ from pymodbus.client import ModbusSerialClient
 from pymodbus.exceptions import ModbusIOException
 
 try:
-    from AutoSpinmotorSystem.config.hardware_config import CONFIG
+    from autospin_system.config.hardware_config import CONFIG
 except ImportError:
     from config.hardware_config import CONFIG
 

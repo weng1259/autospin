@@ -12,8 +12,8 @@ PACKAGE_PARENT = Path(__file__).resolve().parent.parent
 if str(PACKAGE_PARENT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_PARENT))
 
-from AutoSpinmotorSystem.config.hardware_config import CONFIG
-from AutoSpinmotorSystem.hardware.heating_stage import HeatingStageController
+from autospin_system.config.hardware_config import CONFIG
+from autospin_system.hardware.heating_stage import HeatingStageController
 
 
 WRITE_AFTER_PV_READ = False

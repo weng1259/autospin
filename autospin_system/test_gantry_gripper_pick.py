@@ -29,9 +29,9 @@ ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from hardware.xyz_stage.l3_backend.hardware.gripper_backend import GripperBackend
-from hardware.xyz_stage.l3_backend.hardware.relay_backend import RelayBackend
-from hardware.xyz_stage.xyz_stage import XYZStage
+from src.hardware.gripper_backend import GripperBackend
+from src.hardware.relay_backend import RelayBackend
+from autospin_system.hardware.xyz_stage.xyz_stage import XYZStage
 
 
 SCRIPT_VERSION = "shared-relay-interactive-v2"

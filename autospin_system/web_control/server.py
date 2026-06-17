@@ -33,10 +33,10 @@ import sys
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from hardware.xyz_stage.xyz_stage import XYZStage
-from hardware.xyz_stage.l3_backend.hardware.errors import L3Error
-from hardware.pipette.pipette_controller import PipetteController
-from config.hardware_config import CONFIG
+from autospin_system.hardware.xyz_stage.xyz_stage import XYZStage
+from src.hardware.errors import L3Error
+from autospin_system.hardware.pipette.pipette_controller import PipetteController
+from autospin_system.config.hardware_config import CONFIG
 
 
 LOG = logging.getLogger("xyz-web-control")

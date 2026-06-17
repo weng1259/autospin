@@ -9,7 +9,7 @@ timed-event consistency.
 from dataclasses import dataclass, field
 
 try:
-    from AutoSpinmotorSystem.config.hardware_config import CONFIG
+    from autospin_system.config.hardware_config import CONFIG
 except ImportError:
     from config.hardware_config import CONFIG
 

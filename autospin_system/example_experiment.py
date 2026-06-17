@@ -27,9 +27,9 @@ PACKAGE_PARENT = Path(__file__).resolve().parent.parent
 if str(PACKAGE_PARENT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_PARENT))
 
-from AutoSpinmotorSystem.config.hardware_config import CONFIG
-from AutoSpinmotorSystem.maestro import Maestro
-from AutoSpinmotorSystem.hardware.xyz_stage.l3_backend.hardware.gripper_backend import GripperBackend
+from autospin_system.config.hardware_config import CONFIG
+from autospin_system.maestro import Maestro
+from src.hardware.gripper_backend import GripperBackend
 
 
 LOG = logging.getLogger("AutoSpinmotorSystem.ExperimentRunner")

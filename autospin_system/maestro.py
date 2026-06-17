@@ -8,12 +8,12 @@ import concurrent.futures
 from typing import Dict, Any
 
 try:
-    from AutoSpinmotorSystem.config.hardware_config import CONFIG
-    from AutoSpinmotorSystem.hardware.spin_motor.motor_controller import MotorController
-    from AutoSpinmotorSystem.hardware.pipette.pipette_controller import PipetteController
-    from AutoSpinmotorSystem.hardware.relay.relay_manager import RelayManager
-    from AutoSpinmotorSystem.hardware.xyz_stage.xyz_stage import XYZStage
-    from AutoSpinmotorSystem.hardware.heating_stage.heating_stage_controller import HeatingStageController
+    from autospin_system.config.hardware_config import CONFIG
+    from autospin_system.hardware.spin_motor.motor_controller import MotorController
+    from autospin_system.hardware.pipette.pipette_controller import PipetteController
+    from autospin_system.hardware.relay.relay_manager import RelayManager
+    from autospin_system.hardware.xyz_stage.xyz_stage import XYZStage
+    from autospin_system.hardware.heating_stage.heating_stage_controller import HeatingStageController
 except ImportError:
     from config.hardware_config import CONFIG
     from hardware.spin_motor.motor_controller import MotorController
@@ -473,7 +473,7 @@ class Maestro:
 
         if name == "spincoat":
             try:
-                from AutoSpinmotorSystem.workers import Worker_SpincoaterLiquidHandler
+                from autospin_system.workers import Worker_SpincoaterLiquidHandler
             except ImportError:
                 from workers import Worker_SpincoaterLiquidHandler
             # Use a short-lived worker instance so template execution can run
@@ -512,7 +512,7 @@ class Maestro:
 
         if self.gantry:
             try:
-                from AutoSpinmotorSystem.workers import Worker_SpincoaterLiquidHandler
+                from autospin_system.workers import Worker_SpincoaterLiquidHandler
             except ImportError:
                 from workers import Worker_SpincoaterLiquidHandler
             # Reuse the worker's coordinate helper so dispense positions follow
