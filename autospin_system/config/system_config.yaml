@@ -1,13 +1,17 @@
 # AutoSpinmotorSystem 系统物理配置文件
 # 文件路径: config/system_config.yaml
 
+# 串口端口 = 树莓派 udev 稳定名（规则见 /etc/udev/rules.d/99-autospin.rules）。
+# 旋涂/移液/加热三设备共用同一 Exar USB-RS485 桥 (/dev/autospin_rs485)，
+# 靠各自 baud + slave_id 区分（见 devices 段）；继电器、龙门各自独占串口。
+# ⚠️ 除龙门外任何设备都不得指向 /dev/autospin_xyz —— 那是 grbl(CH340)，抢了会让龙门失联。
 communication:
-  rs485_bus_port: "COM9"
-  motor_port: "COM9"
-  pipette_port: "COM9"
-  relay_port: "COM10"
-  gantry_port: "COM11"
-  heating_stage_port: "COM9"
+  rs485_bus_port: "/dev/autospin_rs485"      # Exar 04E2:1411 共享 RS485 总线
+  motor_port: "/dev/autospin_rs485"          # 旋涂电机 (slave_id=2, 9600)
+  pipette_port: "/dev/autospin_rs485"        # 移液枪   (slave_id=1, 115200)
+  heating_stage_port: "/dev/autospin_rs485"  # 加热台   (slave_id=3, 9600)
+  relay_port: "/dev/autospin_relay"          # DSTUR-T80 继电器 STM32 0483:5740
+  gantry_port: "/dev/autospin_xyz"           # grbl-Mega-5X CH340 1A86:7523
 
 system:
   name: "AutoSpinmotorSystem"
@@ -22,8 +26,10 @@ system:
     human: 1
 
 devices:
+  # 注：hwid_keyword 仅作记录（标注每个设备的真实 USB 芯片 vendor:product），
+  # 不参与端口解析——实际端口走上面 communication 段的 udev 稳定名。
   xyz_stage:
-    hwid_keyword: "1A86:7523" # Mega 2560 CH340
+    hwid_keyword: "1A86:7523" # grbl-Mega-5X CH340（龙门，独占 /dev/autospin_xyz）
     baudrate: 115200
     timeout: 0.5
     backend: "grbl_l3"
@@ -39,7 +45,7 @@ devices:
       max: [256000, 256000, 128000]
 
   relay:
-    hwid_keyword: "1A86:7523" # LCUS-8 CH340
+    hwid_keyword: "0483:5740" # DSTUR-T80 继电器 STM32（独占 /dev/autospin_relay）
     baudrate: 9600
     commands:
       prefix: 160             # 十六进制 0xA0
@@ -56,7 +62,7 @@ devices:
       aux_light: 5
 
   spin_motor:
-    hwid_keyword: "1A86:7523" # Modbus RS485
+    hwid_keyword: "04E2:1411" # Exar 共享 RS485 桥（/dev/autospin_rs485，slave_id 区分）
     slave_id: 2
     baudrate: 9600
     timeout: 2.0
@@ -73,6 +79,7 @@ devices:
     max_volume_ul: 1000       # 最大量程
 
   heating_stage:
+    hwid_keyword: "04E2:1411" # Exar 共享 RS485 桥（/dev/autospin_rs485，slave_id 区分）
     model: "AI-516 D2 G S"
     protocol: "modbus"        # Instrument AFC must be 0 for standard Modbus.
     slave_id: 3

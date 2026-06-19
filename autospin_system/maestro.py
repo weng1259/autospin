@@ -23,6 +23,35 @@ except ImportError:
     from hardware.heating_stage.heating_stage_controller import HeatingStageController
 
 
+def resolve_serial_ports(comm_cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """把 communication 配置解析成「设备 → 串口」映射（单一真相源）。
+
+    旋涂电机 / 移液枪 / 加热台共用同一条 USB-RS485 总线：只要设了
+    rs485_bus_port，三者都解析到它，并据此判定 shared_rs485（由 Maestro
+    用 SharedRs485DeviceProxy 串行化共享口的 open-use-close 访问，每次按
+    各设备自己的 baud 重开）。继电器与龙门各自独占串口。
+
+    回退默认值用树莓派 udev 稳定名而非 Windows COM 口：即使某字段缺失，
+    也绝不会把设备解析到龙门的 grbl 口（/dev/autospin_xyz）。
+    """
+    rs485_bus_port = comm_cfg.get('rs485_bus_port')
+    motor_port = rs485_bus_port or comm_cfg.get('motor_port', '/dev/autospin_rs485')
+    pipette_port = rs485_bus_port or comm_cfg.get('pipette_port', '/dev/autospin_rs485')
+    heating_stage_port = rs485_bus_port or comm_cfg.get('heating_stage_port', '/dev/autospin_rs485')
+    relay_port = comm_cfg.get('relay_port', '/dev/autospin_relay')
+    gantry_port = comm_cfg.get('gantry_port', '/dev/autospin_xyz')
+    rs485_ports = [motor_port, pipette_port, heating_stage_port]
+    shared_rs485 = len(set(rs485_ports)) < len(rs485_ports)
+    return {
+        'motor': motor_port,
+        'pipette': pipette_port,
+        'heating_stage': heating_stage_port,
+        'relay': relay_port,
+        'gantry': gantry_port,
+        'shared_rs485': shared_rs485,
+    }
+
+
 class SharedRs485DeviceProxy:
     """Serialize access to devices that share one USB-RS485 serial port."""
 
@@ -154,16 +183,14 @@ class Maestro:
         mock=True 时所有硬件以 mock 模式初始化，不打开任何串口。
         """
         try:
-            # 尝试从 YAML 中读取通信端口，如果没有则使用默认回退值
-            comm_cfg = CONFIG.get('communication', {})
-            rs485_bus_port = comm_cfg.get('rs485_bus_port')
-            motor_port = rs485_bus_port or comm_cfg.get('motor_port', 'COM14')
-            pipette_port = rs485_bus_port or comm_cfg.get('pipette_port', 'COM4')
-            relay_port = comm_cfg.get('relay_port', 'COM5')
-            stage_port = comm_cfg.get('gantry_port', 'COM6')
-            heating_stage_port = rs485_bus_port or comm_cfg.get('heating_stage_port', 'COM6')
-            rs485_ports = [motor_port, pipette_port, heating_stage_port]
-            shared_rs485 = len(set(rs485_ports)) < len(rs485_ports)
+            # 端口解析集中到 resolve_serial_ports（单一真相源，见模块顶部）。
+            ports = resolve_serial_ports(CONFIG.get('communication', {}))
+            motor_port = ports['motor']
+            pipette_port = ports['pipette']
+            relay_port = ports['relay']
+            stage_port = ports['gantry']
+            heating_stage_port = ports['heating_stage']
+            shared_rs485 = ports['shared_rs485']
             shared_rs485_lock = threading.RLock() if shared_rs485 else None
 
             if shared_rs485:
