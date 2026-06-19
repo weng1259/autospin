@@ -296,7 +296,7 @@
       "recoverable": true,
       "severity": "alarm",
       "suggested_action": "DSTUR-T80 relay command failed on Z-brake channel; verify the USB serial port exists and is not held by another process.",
-      "suggested_action_zh": "Z 轴刹车继电器命令失败。确认 /dev/cu.usbmodem6670E00119391 存在且没被其它进程占用，再重试。"
+      "suggested_action_zh": "Z 轴刹车继电器命令失败。确认继电器串口存在且没被其它进程占用，再重试。"
     },
     "ConnectionError": {
       "docstring": "USB / 串口连接异常 —— 端口不存在、被占用、运行中突然拔线。",
@@ -352,7 +352,7 @@
       "recoverable": true,
       "severity": "alarm",
       "suggested_action": "DSTUR-T80 command failed; verify USB port and retry; if persistent reconnect the relay backend.",
-      "suggested_action_zh": "继电器命令失败。若单次瞬失可忽略重试；持续失败检查 /dev/cu.usbmodem6670E00119391 存在且没被其它进程占用。"
+      "suggested_action_zh": "继电器命令失败。若单次瞬失可忽略重试；持续失败检查继电器串口存在且没被其它进程占用。"
     },
     "SoftLimitExceededError": {
       "docstring": "请求的目标坐标超过工作空间软限位。",

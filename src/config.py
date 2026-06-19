@@ -31,20 +31,24 @@ class SoftLimits(BaseModel):
     z_min_mm: float
     z_max_mm: float
 
+    _EPSILON_MM = 0.01
+
     def contains(self, p: Position) -> bool:
+        e = self._EPSILON_MM
         return (
-            self.x_min_mm <= p.x_mm <= self.x_max_mm
-            and self.y_min_mm <= p.y_mm <= self.y_max_mm
-            and self.z_min_mm <= p.z_mm <= self.z_max_mm
+            self.x_min_mm - e <= p.x_mm <= self.x_max_mm + e
+            and self.y_min_mm - e <= p.y_mm <= self.y_max_mm + e
+            and self.z_min_mm - e <= p.z_mm <= self.z_max_mm + e
         )
 
     def assert_contains(self, p: Position) -> None:
+        e = self._EPSILON_MM
         for axis, v, lo, hi in (
             ("x", p.x_mm, self.x_min_mm, self.x_max_mm),
             ("y", p.y_mm, self.y_min_mm, self.y_max_mm),
             ("z", p.z_mm, self.z_min_mm, self.z_max_mm),
         ):
-            if not (lo <= v <= hi):
+            if not (lo - e <= v <= hi + e):
                 raise SoftLimitExceededError(
                     human_message=f"{axis.upper()} = {v} 超出 [{lo}, {hi}]，请调整坐标",
                     agent_message=(

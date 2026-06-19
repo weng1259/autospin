@@ -44,7 +44,7 @@ from .errors import RelayCommunicationError
 from .types import RelayActionPlan, RelayActionResult, RelayState
 
 
-DEFAULT_PORT = "/dev/cu.usbmodem6670E00119391"
+DEFAULT_PORT = "/dev/serial/by-id/usb-STMicroelectronics_STM32_Virtual_ComPort_in_FS_Mode_6670E0011939-if00"
 DEFAULT_BAUD = 9600
 _SETTLE_S = 0.3
 _RECONNECT_BACKOFF_S = 0.5

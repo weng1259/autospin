@@ -52,7 +52,7 @@ def _wrap_unexpected(e: Exception) -> L3Error:
     wrapped.suggested_action = "Drop backend and reconnect; check stderr log for traceback."
     return wrapped
 
-DEFAULT_PORT = "/dev/cu.wchusbserial110"
+DEFAULT_PORT = "/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0"
 
 STATE_DISPLAY: dict[MachineState, tuple[str, str]] = {
     MachineState.IDLE: ("#1f7a1f", "✅ Idle"),
@@ -347,7 +347,9 @@ def live_position() -> None:
     最后更新 {status.last_update_ms_ago:.0f} ms 前
     {" · buf P:" + str(status.planner_buffer_free) if status.planner_buffer_free is not None else ""}
     {" RX:" + str(status.rx_buffer_free) if status.rx_buffer_free is not None else ""}
+    {"" if not status.limit_pins else " · <span style='color:#b41c1c;font-weight:700;'>⚡ Pn:" + ",".join(status.limit_pins) + "</span>"}
   </div>
+  {"" if not status.limit_pins else "<div style='color:#b41c1c;font-size:0.9rem;font-weight:600;margin-top:0.2rem;'>⚠️ 限位触发: " + ", ".join(c + "轴" for c in status.limit_pins) + " — 该轴 jog 已禁用</div>"}
 </div>
 """,
             unsafe_allow_html=True,
@@ -483,11 +485,210 @@ if st.session_state.get("confirm_home"):
         st.session_state.pop("confirm_home", None)
         st.rerun()
 
+def _clamp(v: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, v))
+
+
+# ── Jog 点动 ──
+st.divider()
+st.subheader("🕹️ Jog 点动")
+
+_jog_backend = st.session_state.get("backend")
+_jog_connected = _jog_backend is not None and _jog_backend.is_connected()
+
+if not _jog_connected:
+    st.info("请先点 🔍 查状态 建立连接。")
+else:
+    _jog_status = _jog_backend.get_status()
+    _pn = _jog_status.limit_pins
+
+    if not _jog_status.is_homed:
+        st.warning("⚠️ 机器未归零 — 软限位不生效，请谨慎操作。建议先归零。")
+
+    if _pn:
+        st.error(f"⚡ 限位触发：{', '.join(c + '轴' for c in _pn)} — 该轴 jog 已禁用")
+
+    jc_step, jc_feed = st.columns(2)
+    with jc_step:
+        jog_step = st.select_slider(
+            "步长 (mm)", options=[0.1, 0.5, 1.0, 5.0, 10.0], value=1.0
+        )
+    with jc_feed:
+        jog_feed = st.select_slider(
+            "进给 (mm/min)", options=[50, 100, 200, 500, 1000], value=100
+        )
+
+    def _do_jog(axis: str, dist: float) -> None:
+        try:
+            pos = _jog_backend.jog(axis, dist, feed_mm_min=float(jog_feed))
+            st.toast(
+                f"{axis}{dist:+.1f} → "
+                f"X={pos.x_mm:+.2f} Y={pos.y_mm:+.2f} Z={pos.z_mm:+.2f}",
+                icon="✅",
+            )
+        except L3Error as e:
+            st.session_state["last_error"] = e
+            st.session_state["last_status"] = None
+            st.rerun(scope="app")
+        except Exception as e:
+            st.session_state["last_error"] = _wrap_unexpected(e)
+            st.session_state["last_status"] = None
+            st.rerun(scope="app")
+
+    _x_blocked = "X" in _pn
+    _y_blocked = "Y" in _pn
+    _z_blocked = "Z" in _pn
+
+    jx_label, jx_minus, jx_plus = st.columns([0.6, 1, 1])
+    jx_label.markdown(
+        '<div style="font-size:1.3rem;font-weight:700;padding-top:0.3rem;">X</div>',
+        unsafe_allow_html=True,
+    )
+    if jx_minus.button(
+        f"◀ X−{jog_step}", disabled=_x_blocked, use_container_width=True
+    ):
+        _do_jog("X", -jog_step)
+    if jx_plus.button(
+        f"X+{jog_step} ▶", disabled=_x_blocked, use_container_width=True
+    ):
+        _do_jog("X", jog_step)
+
+    jy_label, jy_minus, jy_plus = st.columns([0.6, 1, 1])
+    jy_label.markdown(
+        '<div style="font-size:1.3rem;font-weight:700;padding-top:0.3rem;">Y</div>',
+        unsafe_allow_html=True,
+    )
+    if jy_minus.button(
+        f"◀ Y−{jog_step}", disabled=_y_blocked, use_container_width=True
+    ):
+        _do_jog("Y", -jog_step)
+    if jy_plus.button(
+        f"Y+{jog_step} ▶", disabled=_y_blocked, use_container_width=True
+    ):
+        _do_jog("Y", jog_step)
+
+    jz_label, jz_minus, jz_plus = st.columns([0.6, 1, 1])
+    jz_label.markdown(
+        '<div style="font-size:1.3rem;font-weight:700;padding-top:0.3rem;">Z</div>',
+        unsafe_allow_html=True,
+    )
+    if jz_minus.button(
+        f"▼ Z−{jog_step}", disabled=_z_blocked, use_container_width=True
+    ):
+        _do_jog("Z", -jog_step)
+    if jz_plus.button(
+        f"Z+{jog_step} ▲", disabled=_z_blocked, use_container_width=True
+    ):
+        _do_jog("Z", jog_step)
+
+    st.caption("Z 轴 jog 自动释放/锁回刹车。限位触发时该轴按钮禁用。")
+
+# ── Z2 控件 ──
+st.divider()
+st.subheader("🔽 Z2（A 轴升降台）")
+st.caption(
+    "⚠️ Z2 无限位传感器，靠软件 0–125mm 边界。A 值增大 = 向下。"
+    "距离近似（$103 标定待校），先小步试。"
+)
+
+_z2_backend = st.session_state.get("backend")
+_z2_connected = _z2_backend is not None and _z2_backend.is_connected()
+
+if not _z2_connected:
+    st.info("请先点 🔍 查状态 建立连接。")
+else:
+    _z2_inited = getattr(_z2_backend, "_z2_initialized", False)
+
+    if not _z2_inited:
+        st.warning("Z2 尚未初始化。请确认滑台在**最高点**，然后点下方按钮声明 A=0。")
+        if st.button("🔝 初始化 Z2（声明当前位置为顶部 A=0）", type="primary"):
+            try:
+                _z2_backend.initialize_z2_at_top()
+                st.toast("Z2 已初始化：A=0（顶部）", icon="✅")
+                st.rerun()
+            except L3Error as e:
+                st.session_state["last_error"] = e
+                st.rerun(scope="app")
+            except Exception as e:
+                st.session_state["last_error"] = _wrap_unexpected(e)
+                st.rerun(scope="app")
+    else:
+        _z2_pos = _z2_backend.get_status().position.z2_mm
+        st.markdown(
+            f'<div style="font-family:monospace;font-size:1.2rem;">'
+            f'Z2 (A) = {_z2_pos:+.2f} mm</div>',
+            unsafe_allow_html=True,
+        )
+
+        z2c_step, z2c_feed = st.columns(2)
+        with z2c_step:
+            z2_step = st.select_slider(
+                "Z2 步长 (mm)", options=[0.5, 1.0, 2.0, 5.0, 10.0],
+                value=1.0, key="z2_step_slider",
+            )
+        with z2c_feed:
+            z2_feed = st.select_slider(
+                "Z2 进给 (mm/min)", options=[50, 100, 200],
+                value=100, key="z2_feed_slider",
+            )
+
+        def _do_z2_move(target: float) -> None:
+            try:
+                result = _z2_backend.move_z2_to(target, feed_mm_min=float(z2_feed))
+                st.toast(f"Z2 → {result.position.z2_mm:+.2f} mm", icon="✅")
+            except L3Error as e:
+                st.session_state["last_error"] = e
+                st.rerun(scope="app")
+            except Exception as e:
+                st.session_state["last_error"] = _wrap_unexpected(e)
+                st.rerun(scope="app")
+
+        z2_up_col, z2_dn_col = st.columns(2)
+        if z2_up_col.button(
+            f"▲ Z2−{z2_step}（上）", use_container_width=True,
+            disabled=_z2_pos - z2_step < 0,
+        ):
+            _do_z2_move(_z2_pos - z2_step)
+        if z2_dn_col.button(
+            f"▼ Z2+{z2_step}（下）", use_container_width=True,
+            disabled=_z2_pos + z2_step > 125,
+        ):
+            _do_z2_move(_z2_pos + z2_step)
+
+        with st.expander("Z2 预设位置"):
+            z2_presets = [0, 25, 50, 75, 100, 125]
+            z2_preset_cols = st.columns(len(z2_presets))
+            for i, preset in enumerate(z2_presets):
+                if z2_preset_cols[i].button(
+                    f"{preset}", key=f"z2_preset_{preset}",
+                    use_container_width=True,
+                ):
+                    _do_z2_move(float(preset))
+
+            z2_custom = st.number_input(
+                "自定义 Z2 位置 (mm)", min_value=0.0, max_value=125.0,
+                value=_clamp(_z2_pos, 0.0, 125.0), step=1.0,
+                format="%.1f", key="z2_custom_input",
+            )
+            if st.button("🎯 Z2 去这里", key="z2_go_custom"):
+                _do_z2_move(float(z2_custom))
+
+        if st.button("🅿️ Z2 归位（回顶部 A=0）"):
+            try:
+                _z2_backend.park_z2(feed_mm_min=float(z2_feed))
+                st.toast("Z2 已归位 A=0", icon="✅")
+            except L3Error as e:
+                st.session_state["last_error"] = e
+                st.rerun(scope="app")
+            except Exception as e:
+                st.session_state["last_error"] = _wrap_unexpected(e)
+                st.rerun(scope="app")
+
 # ── 去这里 ──
 st.divider()
 st.subheader("🎯 去这里（绝对坐标）")
 st.caption(
-    "发送 `G90 G1 X… Y… Z… F…`。Z 刹车自动释放/锁回，移动中点顶部 🛑 停 可中止。"
+    "发送 `$J=G90 X… Y… Z… F…`。Z 刹车自动释放/锁回，移动中点顶部 🛑 停 可中止。"
     "软限位校验在 backend 入口做（双重防线）。"
 )
 
@@ -499,7 +700,7 @@ x_val = cx.number_input(
     "X (mm)",
     min_value=float(sl.x_min_mm),
     max_value=float(sl.x_max_mm),
-    value=st.session_state.get("move_x", 0.0),
+    value=_clamp(st.session_state.get("move_x", 0.0), float(sl.x_min_mm), float(sl.x_max_mm)),
     step=1.0,
     format="%.3f",
     key="move_x_input",
@@ -508,7 +709,7 @@ y_val = cy.number_input(
     "Y (mm)",
     min_value=float(sl.y_min_mm),
     max_value=float(sl.y_max_mm),
-    value=st.session_state.get("move_y", 0.0),
+    value=_clamp(st.session_state.get("move_y", 0.0), float(sl.y_min_mm), float(sl.y_max_mm)),
     step=1.0,
     format="%.3f",
     key="move_y_input",
@@ -517,7 +718,7 @@ z_val = cz.number_input(
     "Z (mm)",
     min_value=float(sl.z_min_mm),
     max_value=float(sl.z_max_mm),
-    value=st.session_state.get("move_z", 0.0),
+    value=_clamp(st.session_state.get("move_z", 0.0), float(sl.z_min_mm), float(sl.z_max_mm)),
     step=1.0,
     format="%.3f",
     key="move_z_input",

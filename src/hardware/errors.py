@@ -111,8 +111,8 @@ class RelayCommunicationError(L3Error):
         "reconnect the relay backend."
     )
     suggested_action_zh = (
-        "继电器命令失败。若单次瞬失可忽略重试；持续失败检查 "
-        "/dev/cu.usbmodem6670E00119391 存在且没被其它进程占用。"
+        "继电器命令失败。若单次瞬失可忽略重试；持续失败检查继电器串口"
+        "存在且没被其它进程占用。"
     )
 
 
@@ -127,8 +127,7 @@ class BrakeError(RelayCommunicationError):
         "serial port exists and is not held by another process."
     )
     suggested_action_zh = (
-        "Z 轴刹车继电器命令失败。确认 /dev/cu.usbmodem6670E00119391 存在且"
-        "没被其它进程占用，再重试。"
+        "Z 轴刹车继电器命令失败。确认继电器串口存在且没被其它进程占用，再重试。"
     )
 
 

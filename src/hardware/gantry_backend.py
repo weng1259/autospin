@@ -902,6 +902,85 @@ class GantryBackend:
         )
 
     @observable
+    def jog(
+        self,
+        axis: str,
+        distance_mm: float,
+        feed_mm_min: float = 100.0,
+    ) -> Position:
+        """相对 jog（`$J=G91 {axis}{dist} F{feed}`）。限位感知 + Z 刹车。
+
+        用于面板 bring-up 测试。不要求已归零（bring-up 时未归零也要能微调）。
+        已归零时额外做软限位校验。
+        """
+        axis = axis.upper()
+        if axis not in ("X", "Y", "Z"):
+            raise L3Error(
+                human_message=f"无效轴名 '{axis}'，应为 X/Y/Z",
+                agent_message=f"Invalid axis '{axis}'; expected X, Y, or Z.",
+            )
+        if not (0 < feed_mm_min <= self.config.motion.max_feed_mm_min):
+            raise L3Error(
+                human_message=f"进给速度 {feed_mm_min} 超出范围",
+                agent_message=(
+                    f"feed_mm_min={feed_mm_min} outside "
+                    f"(0, {self.config.motion.max_feed_mm_min}]"
+                ),
+            )
+        if self._ser is None:
+            raise L3ConnectionError(
+                human_message="串口未连接",
+                agent_message="GantryBackend not connected; call connect() first.",
+            )
+
+        status = self.get_status()
+
+        if axis in status.limit_pins:
+            raise L3Error(
+                human_message=(
+                    f"{axis} 轴限位开关已触发（Pn: {','.join(status.limit_pins)}），"
+                    f"禁止 jog。请先归零或手动解除。"
+                ),
+                agent_message=(
+                    f"Limit pin active for axis {axis} "
+                    f"(Pn:{status.limit_pins}); jog blocked."
+                ),
+            )
+
+        if self._is_homed:
+            cur = status.position
+            target_val = getattr(cur, f"{axis.lower()}_mm") + distance_mm
+            target_pos = Position(
+                x_mm=cur.x_mm if axis != "X" else target_val,
+                y_mm=cur.y_mm if axis != "Y" else target_val,
+                z_mm=cur.z_mm if axis != "Z" else target_val,
+            )
+            self.config.soft_limits.assert_contains(target_pos)
+
+        is_z = axis == "Z"
+        if is_z:
+            self._release_brake()
+
+        try:
+            cmd = f"$J=G91 {axis}{distance_mm:.3f} F{feed_mm_min:.0f}\n"
+            self._send_line_blocking(
+                cmd, timeout_s=10.0, timeout_msg=f"jog {axis} 未在 10s 内 ack"
+            )
+            try:
+                self._poll_status_sync(timeout_s=0.5)
+            except Exception:
+                pass
+            self._wait_idle(timeout_s=10.0)
+        finally:
+            if is_z:
+                try:
+                    self._lock_brake()
+                except BrakeError:
+                    pass
+
+        return self.get_status().position
+
+    @observable
     def halt(self) -> MachineStatus:
         """立刻停止：feedhold `!` + jog cancel `\\x85`。幂等。
 
