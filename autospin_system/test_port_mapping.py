@@ -16,7 +16,7 @@ from autospin_system.hardware.heating_stage.heating_stage_controller import (
 )
 
 
-RS485 = "/dev/autospin_rs485"   # Exar 04E2:1411 共享总线
+RS485 = "/dev/autospin_rs485"   # CH340 1A86:7523 共享总线（同 grbl 芯片，udev 物理口区分）
 RELAY = "/dev/autospin_relay"   # DSTUR-T80 STM32 0483:5740
 XYZ = "/dev/autospin_xyz"       # grbl-Mega-5X CH340 1A86:7523（龙门专属）
 
@@ -41,7 +41,7 @@ def test_only_gantry_uses_grbl_ch340_port():
 
 
 def test_three_rs485_devices_share_one_bridge():
-    """旋涂/移液/加热共用同一条 Exar RS485 总线，shared_rs485 自动判真。"""
+    """旋涂/移液/加热共用同一条 CH340 RS485 总线，shared_rs485 自动判真。"""
     ports = resolve_serial_ports(CONFIG["communication"])
     assert ports["motor"] == ports["pipette"] == ports["heating_stage"] == RS485
     assert ports["shared_rs485"] is True

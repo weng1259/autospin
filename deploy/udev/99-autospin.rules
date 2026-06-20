@@ -1,0 +1,23 @@
+# AutoSpin 串口稳定命名规则
+# 2026-06-20 修订：grbl 与加热台 RS485 同为 CH340(1a86:7523)，hwid 无法区分，
+#                  改用物理 USB 口 (KERNELS) 锁定。Exar(04e2:1411) 已弃用（发得出收不回），
+#                  换回 CH340 USB-RS485 模块（实测读 PV 5/5 通）。
+#
+# 物理实测拓扑 (2026-06-20, Pi=AutoSpin2026):
+#   USB 口 1-1 : CH340 1a86:7523  = grbl-Mega-5X 运动控制器            -> autospin_xyz
+#   USB 口 1-2 : CH340 1a86:7523  = USB-RS485 模块 (加热台/移液/电机共享) -> autospin_rs485 (+autospin_heater 别名)
+#   USB 口 3-2 : STM32 0483:5740  = DSTUR-T80 USB 继电器 (6670E0011939)  -> autospin_relay
+#
+# ⚠️ KERNELS 用 USB 设备层 "1-1"/"1-2"（不是接口层 "1-1:1.0"），
+#    这样 KERNELS 与 ATTRS{idVendor/idProduct} 落在同一节点才能匹配。
+# ⚠️ 两个 CH340 靠物理 USB 口区分：grbl 必须插 1-1 口、RS485 模块必须插 1-2 口。
+#    换口会让软链错位 —— 换口后须更新 KERNELS（udevadm info -a -n /dev/ttyUSBx 看 KERNELS==）。
+
+# grbl 运动控制器 —— 物理口 1-1 (CH340)
+SUBSYSTEM=="tty", KERNELS=="1-1", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", SYMLINK+="autospin_xyz"
+
+# USB-RS485 模块（加热台/移液/电机共享总线）—— 物理口 1-2 (CH340)
+SUBSYSTEM=="tty", KERNELS=="1-2", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", SYMLINK+="autospin_rs485 autospin_heater"
+
+# DSTUR-T80 USB 继电器（夹爪 CH1 + Z 刹车 CH2）—— 唯一序列号，按 hwid 即可
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="5740", SYMLINK+="autospin_relay"
