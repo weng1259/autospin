@@ -56,20 +56,27 @@ class Registers:
     COIL_TERM = 0x03
 
 
-# 动作码
+# 动作码（手册 §5.1.2，运动控制保持寄存器 reg0 的低四位）。
+#
+# ⚠️ 设备动作码 **1 起步**（以手册唯一标了十六进制的「吸液=0x0A」为锚反推）。
+# 师兄 driver 原按 0 起步编号，低半区整体差一位 —— HOME 误写 0x00（设备的
+# 「空闲/无指令」码）导致归位从来没被触发（6-20 "homed 置不了 1" 的真因）。
+# 2026-06-29 真机实测 0x01 跑出完整二段式归位，确认 +1 修正正确。
+# 0x0A/0x0B/0x0C（吸/吐/退tip）原本就对，保持不动。
 class ActionCode:
-    HOME = 0x00
-    ABS_MOVE = 0x01
-    REL_FWD = 0x02
-    REL_BWD = 0x03
-    JOG_FWD = 0x04
-    JOG_BWD = 0x05
-    SLOW_STOP = 0x06
-    IMM_STOP = 0x07
-    LIQ_DETECT = 0x08
-    ASPIRATE = 0x0A
-    DISPENSE = 0x0B
-    DROP_TIP = 0x0C
+    IDLE = 0x00       # 空闲 / 无指令（不是动作；用于在写动作码前制造"值变化边沿"）
+    HOME = 0x01       # 原点回归（实测✓，6-20 误写 0x00）
+    ABS_MOVE = 0x02
+    REL_FWD = 0x03
+    REL_BWD = 0x04    # 相对后退（实测✓ 内缩 -2000）
+    JOG_FWD = 0x05
+    JOG_BWD = 0x06
+    SLOW_STOP = 0x07
+    IMM_STOP = 0x08   # 立即停止（driver 拿它当刹车）
+    LIQ_DETECT = 0x09
+    ASPIRATE = 0x0A   # 吸液（6-20 实测能动，碰巧本就对）
+    DISPENSE = 0x0B   # 吐液
+    DROP_TIP = 0x0C   # 退tip头
 
 
 # 默认运动参数
@@ -157,10 +164,16 @@ class PipetteController:
         return self.comm.read_input_registers(Registers.TIP_PRESENT)[0] == 1
 
     def get_actual_position(self) -> int:
-        """读取当前脉冲位置(32位)"""
-        high = self.comm.read_input_registers(Registers.POS_H)[0]
-        low = self.comm.read_input_registers(Registers.POS_L)[0]
-        return (high << 16) | low
+        """读取当前脉冲位置（32 位**有符号**，柱塞可为负）。
+
+        一次原子读 H+L（``read_input_registers(POS_H, 2)``）——分两次读在运动中
+        两次不同步会拼出 -65572 类撕裂鬼值（16 位借位）。
+        """
+        regs = self.comm.read_input_registers(Registers.POS_H, 2)
+        value = (regs[0] << 16) | regs[1]
+        if value >= 2 ** 31:
+            value -= 2 ** 32
+        return value
 
     def _read_driver_fault(self) -> bool:
         """读取驱动器异常标志"""
@@ -197,6 +210,26 @@ class PipetteController:
             time.sleep(0.1)
         return False
 
+    def _wait_for_action_cycle(self, read_state, timeout=10) -> bool:
+        """等待动作状态从空闲进入运行，再回到空闲。
+
+        不能在写入动作命令后仅凭第一次读到 IDLE 就返回成功：设备可能尚未
+        来得及置位动作状态。吸液和吐液分别使用手册定义的专用状态寄存器。
+        """
+        if self.mock:
+            return True
+
+        started = False
+        start = time.time()
+        while time.time() - start < timeout:
+            active = bool(read_state())
+            if active:
+                started = True
+            elif started:
+                return True
+            time.sleep(0.1)
+        return False
+
     # ---------- 运动参数设置 ----------
 
     def set_speed(self, speed_01rps):
@@ -214,9 +247,45 @@ class PipetteController:
     # ---------- 核心动作 ----------
 
     def home(self, timeout=30) -> bool:
-        """原点回归"""
+        """原点回归。
+
+        触发后**轮询归位标志(input reg1)==1** 判完成——不能用 ``status_word==0``，
+        那个刚下命令、柱塞还没启动时就读到 IDLE，会立刻误判完成（6-20 "homed
+        置不了 1" 的连带原因之一）。归位行程可达 ~9500+ 脉冲、二段式（粗找 →
+        撞光耦退让 → 精定位），需十几秒，故 timeout 给足（>=30s）。
+
+        运动控制寄存器靠"值变化边沿"触发：先写空闲码(0x00) 再写归位码(0x01)，
+        保证即使上一次动作残留同值也能触发（实测有效的归位序列即 0x00→0x01）。
+
+        超时/失败必须刹车（发立即停止），别像旧实现只 ``return False`` 放任电机
+        继续跑（6-20 顶吸头隐患）。
+        """
+        self.comm.write_register(Registers.CTRL, ActionCode.IDLE)
         self.comm.write_register(Registers.CTRL, ActionCode.HOME)
-        return self.wait_for_idle(timeout)
+
+        if self.mock:
+            return True
+
+        start = time.time()
+        started = False
+        while time.time() - start < timeout:
+            homed = self.is_homed()
+            status_word = self.get_status_word()
+            if not started:
+                # 归位已启动：归位标志被清零 或 观察到运动
+                if not homed or status_word != 0:
+                    started = True
+            elif homed and status_word == 0:
+                return True
+            time.sleep(0.1)
+
+        # 超时：必须刹车，别放任柱塞继续跑
+        self.logger.error(f"归位超时 {timeout}s，发立即停止刹车")
+        try:
+            self.stop()
+        except Exception as exc:  # noqa: BLE001 - 刹车尽力而为，别在错误路径再抛
+            self.logger.error(f"归位超时刹车失败: {exc}")
+        return False
 
     def aspirate(self, volume: int, detect_mask: int = 0) -> bool:
         """
@@ -240,6 +309,9 @@ class PipetteController:
         if not self.tip_present():
             raise RuntimeError("未检测到Tip头，请安装Tip头")
 
+        if not 0 <= int(detect_mask) <= 0x07:
+            raise ValueError("detect_mask must be between 0 and 7")
+
         self.logger.info(f"吸取液体: {volume}uL")
 
         # 设置体积（拆分为高低16位）
@@ -247,19 +319,15 @@ class PipetteController:
         low = volume & 0xFFFF
         self.comm.write_registers(Registers.VOL_H, [high, low])
 
-        # 构造控制字
-        ctrl = (detect_mask << 4) | ActionCode.ASPIRATE
+        # 构造控制字：检测使能位为 bit7-bit5，低四位保持吸液动作码 0x0A。
+        ctrl = (int(detect_mask) << 5) | ActionCode.ASPIRATE
         self.comm.write_register(Registers.CTRL, ctrl)
 
-        # 等待吸液完成（轮询吸液状态bit0）
-        start = time.time()
-        timeout = 10
-        while time.time() - start < timeout:
-            idle, _ = self.get_aspirate_state()
-            if idle:
-                return True
-            time.sleep(0.05)
-        return False
+        # 等待吸液完成：从空闲->运行->空闲（专用吸液状态寄存器 bit0）。
+        return self._wait_for_action_cycle(
+            lambda: self._read_aspirate_state_raw() & 0x01,
+            timeout=10,
+        )
 
     def dispense(self, volume: int) -> bool:
         """
@@ -288,7 +356,10 @@ class PipetteController:
         low = volume & 0xFFFF
         self.comm.write_registers(Registers.VOL_H, [high, low])
         self.comm.write_register(Registers.CTRL, ActionCode.DISPENSE)
-        return self.wait_for_idle(10)
+        return self._wait_for_action_cycle(
+            lambda: self._read_dispense_state_raw() != 0,
+            timeout=10,
+        )
 
     def blowout(self) -> bool:
         """吹出残留液体（吐液到底）"""
