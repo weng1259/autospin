@@ -79,10 +79,14 @@ class ActionCode:
     DROP_TIP = 0x0C   # 退tip头
 
 
-# 默认运动参数
-DEFAULT_SPEED = 10
-DEFAULT_ACCEL = 20
-DEFAULT_DECEL = 20
+# 默认运动参数（手册 §5.1.2 保持寄存器建议值：速度 50 / 加减速 1250）。
+# ⚠️ 师兄原值 10/20/20 远低于建议，且 _initialize_pipette 会用它们覆盖 flash 里
+# 已配好的 50/1250/1250 —— 把速度压到最慢(1 r/s)、加减速压到极小，导致 home()
+# 在默认 30s 超时内跑不完整段粗找行程（2026-06-29 真机实测：VEL=10 时 30s 只走
+# 到 5786 没够光耦；VEL=40 时 3.8s 干净跑完）。改回手册建议值。
+DEFAULT_SPEED = 50    # 0.1转/秒（=5 r/s，调试软件速度范围 1-15 r/s）
+DEFAULT_ACCEL = 1250  # 0.1转/平方秒
+DEFAULT_DECEL = 1250  # 0.1转/平方秒
 
 
 class PipetteController:
