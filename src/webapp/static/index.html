@@ -316,6 +316,57 @@
               <p class="panel-message" data-role="message" aria-live="polite">就绪</p>
             </div>
           </article>
+
+          <article id="routine-panel" class="panel device-card routine-card" aria-labelledby="routine-heading">
+            <header class="device-card-header">
+              <div class="device-identity">
+                <h3 id="routine-heading">程序</h3>
+                <span id="routine-record-dot" class="device-state-dot" aria-hidden="true"></span>
+                <span id="routine-record-state" class="panel-state">未录制</span>
+              </div>
+              <output id="routine-step-count" class="numeric-reading">0 步</output>
+            </header>
+
+            <div class="routine-recording-section">
+              <form id="routine-record-form" class="control-row">
+                <label class="field-control" for="routine-name-input">程序名称
+                  <input id="routine-name-input" name="name" type="text" maxlength="120" autocomplete="off" required>
+                </label>
+                <button class="primary-button" type="submit" data-routine-action="arm">开始录制</button>
+                <button id="routine-disarm-button" type="button">停止录制并保存</button>
+              </form>
+              <output id="routine-recent-step" class="routine-step-label">最近步骤：—</output>
+            </div>
+
+            <div class="routine-list-section">
+              <table class="routine-table">
+                <thead>
+                  <tr>
+                    <th scope="col">名称</th>
+                    <th scope="col">步数</th>
+                    <th scope="col">时长 s</th>
+                    <th scope="col">运动</th>
+                    <th scope="col">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="routine-list-body">
+                  <tr><td class="routine-empty" colspan="5">暂无程序</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="routine-replay-section">
+              <span class="control-note">重放进度</span>
+              <output id="routine-replay-progress" class="numeric-reading">0/0</output>
+              <output id="routine-replay-label" class="routine-step-label">当前步骤：—</output>
+              <button id="routine-abort-button" class="danger-outline-button" type="button" data-always-enabled="true">中止重放</button>
+            </div>
+
+            <div class="panel-feedback">
+              <output id="routine-operation-id" class="panel-operation numeric-reading" hidden></output>
+              <p id="routine-message" class="panel-message" aria-live="polite">就绪</p>
+            </div>
+          </article>
         </div>
       </section>
 

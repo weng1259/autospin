@@ -582,6 +582,127 @@ form.control-row {
   padding-left: 5px;
 }
 
+.routine-card {
+  grid-column: span 2;
+}
+
+.routine-recording-section,
+.routine-list-section,
+.routine-replay-section {
+  padding-top: 5px;
+  margin-top: 5px;
+  border-top: 1px solid var(--border);
+}
+
+.routine-recording-section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, auto);
+  gap: 4px 8px;
+  align-items: center;
+}
+
+.routine-recording-section form {
+  margin: 0;
+}
+
+.routine-recording-section .field-control {
+  flex: 1 1 180px;
+}
+
+.routine-recording-section input[type="text"] {
+  width: 100%;
+  min-width: 120px;
+}
+
+.routine-step-label {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.routine-list-section {
+  overflow-x: auto;
+}
+
+.routine-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.routine-table th,
+.routine-table td {
+  padding: 3px 4px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.routine-table th {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.routine-table th:nth-child(1) {
+  width: 32%;
+}
+
+.routine-table th:nth-child(2),
+.routine-table th:nth-child(3),
+.routine-table th:nth-child(4) {
+  width: 12%;
+  text-align: right;
+}
+
+.routine-table th:nth-child(5) {
+  width: 32%;
+  text-align: right;
+}
+
+.routine-table td.numeric-reading,
+.routine-table td.routine-motion,
+.routine-table td.routine-actions {
+  text-align: right;
+}
+
+.routine-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.routine-row.is-delete-confirm td,
+.routine-delete-confirm {
+  color: var(--red);
+}
+
+.device-card .routine-delete-confirm {
+  border-color: var(--red);
+}
+
+.routine-table td.routine-empty {
+  color: var(--muted);
+  text-align: center;
+}
+
+.routine-replay-section {
+  display: grid;
+  grid-template-columns: auto 54px minmax(120px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+#routine-replay-progress {
+  text-align: right;
+}
+
 .panel-feedback {
   display: grid;
   gap: 2px;
@@ -704,6 +825,22 @@ form.control-row {
 @media (max-width: 640px) {
   .device-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .routine-card {
+    grid-column: span 1;
+  }
+
+  .routine-recording-section {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .routine-replay-section {
+    grid-template-columns: auto 54px minmax(0, 1fr);
+  }
+
+  #routine-abort-button {
+    grid-column: 1 / -1;
   }
 
   .token-field {

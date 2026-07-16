@@ -40,6 +40,7 @@ from .gate import (
 from .registry import DeviceRegistry
 from .routes_devices import register_device_routes
 from .routes_gantry import register_gantry_routes
+from .routes_routines import register_routine_routes
 
 
 _STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -53,7 +54,12 @@ class HealthResponse(BaseModel):
     mock: bool
 
 
-def create_app(registry: DeviceRegistry, *, token: str) -> FastAPI:
+def create_app(
+    registry: DeviceRegistry,
+    *,
+    token: str,
+    routines_path: str | Path = Path("runtime/routines"),
+) -> FastAPI:
     """为一个注册表创建独立的 Web 应用实例。"""
 
     if isinstance(registry.poller, OperationStatusPoller):
@@ -99,6 +105,12 @@ def create_app(registry: DeviceRegistry, *, token: str) -> FastAPI:
     register_operation_routes(app, operation_gate)
     register_gantry_routes(app, registry, operation_gate)
     register_device_routes(app, registry, operation_gate)
+    register_routine_routes(
+        app,
+        registry,
+        operation_gate,
+        base_dir=routines_path,
+    )
     app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
     @app.get("/", include_in_schema=False)

@@ -11,6 +11,7 @@ from ..hardware.linearstage_backend import LinearStageBackend
 from ..hardware.pipette_backend import PipetteBackend
 from ..hardware.relay_backend import RelayBackend
 from ..hardware.spincoater_backend import SpincoaterBackend
+from ..routine import DEFAULT_RECORDABLE, RecordingProxy, RoutineRecorder
 from ..system_estop import SystemEstop
 from .poller import PollerLike, StatusPoller
 
@@ -28,6 +29,7 @@ class DeviceRegistry:
     linear_stage: Optional[LinearStageBackend] = None
     estop: SystemEstop = field(default_factory=SystemEstop)
     mock: bool = False
+    routine_recorder: RoutineRecorder = field(default_factory=RoutineRecorder)
     poller: PollerLike = field(init=False)
 
     def __post_init__(self) -> None:
@@ -48,19 +50,60 @@ class DeviceRegistry:
             MockSpincoater,
         )
 
-        gantry = cast(GantryBackend, MockGantry())
-        relay = cast(RelayBackend, MockRelay())
-        gripper = cast(GripperBackend, MockGripper())
-        heater = cast(HeaterBackend, MockHeater())
-        spincoater = cast(SpincoaterBackend, MockSpincoater())
-        pipette = cast(PipetteBackend, MockPipette())
-        linear_stage = cast(LinearStageBackend, MockLinearStage())
+        recorder = RoutineRecorder()
+        raw_gantry = MockGantry()
+        raw_relay = MockRelay()
+        raw_gripper = MockGripper()
+        raw_heater = MockHeater()
+        raw_spincoater = MockSpincoater()
+        raw_pipette = MockPipette()
+        raw_linear_stage = MockLinearStage()
+
+        gantry = cast(
+            GantryBackend,
+            RecordingProxy(raw_gantry, recorder, "gantry"),
+        )
+        relay = cast(
+            RelayBackend,
+            RecordingProxy(raw_relay, recorder, "relay"),
+        )
+        gripper = cast(
+            GripperBackend,
+            RecordingProxy(raw_gripper, recorder, "gripper"),
+        )
+        heater = cast(
+            HeaterBackend,
+            RecordingProxy(raw_heater, recorder, "heater"),
+        )
+        spincoater = cast(
+            SpincoaterBackend,
+            RecordingProxy(raw_spincoater, recorder, "spin"),
+        )
+        pipette = cast(
+            PipetteBackend,
+            RecordingProxy(
+                raw_pipette,
+                recorder,
+                "pipette",
+                DEFAULT_RECORDABLE["pipette"] | {"eject_tip"},
+            ),
+        )
+        linear_stage = cast(
+            LinearStageBackend,
+            RecordingProxy(
+                raw_linear_stage,
+                recorder,
+                "linear_stage",
+                {"home", "move_to"},
+            ),
+        )
         estop = SystemEstop(
-            gantry=gantry,
-            spincoater=spincoater,
-            linear_stage=linear_stage,
-            pipette=pipette,
-            heater=heater,
+            # 急停直达未包装对象，不能把安全动作误录进 routine。
+            gantry=cast(GantryBackend, raw_gantry),
+            spincoater=cast(SpincoaterBackend, raw_spincoater),
+            linear_stage=cast(LinearStageBackend, raw_linear_stage),
+            pipette=cast(PipetteBackend, raw_pipette),
+            heater=cast(HeaterBackend, raw_heater),
         )
         return cls(
             gantry=gantry,
@@ -72,6 +115,7 @@ class DeviceRegistry:
             linear_stage=linear_stage,
             estop=estop,
             mock=True,
+            routine_recorder=recorder,
         )
 
     @classmethod

@@ -12,6 +12,7 @@ const DEVICE_LABELS = {
   linear_stage: "滑台",
   relay: "继电器",
   gripper: "夹爪",
+  routine: "程序",
 };
 
 const ACTION_LABELS = {
@@ -33,6 +34,7 @@ const ACTION_LABELS = {
   "ch-off": "通道 OFF",
   open: "张开",
   close: "夹紧",
+  replay: "重放",
 };
 
 const elements = {
@@ -51,11 +53,27 @@ const elements = {
   eventCount: document.querySelector("#event-count"),
   eventLog: document.querySelector("#event-log"),
   devicePanels: new Map(
-    [...document.querySelectorAll("[data-device]")].map((panel) => [
-      panel.dataset.device,
-      panel,
-    ]),
+    [
+      ...[...document.querySelectorAll("[data-device]")].map((panel) => [
+        panel.dataset.device,
+        panel,
+      ]),
+      ["routine", document.querySelector("#routine-panel")],
+    ],
   ),
+  routineRecordForm: document.querySelector("#routine-record-form"),
+  routineNameInput: document.querySelector("#routine-name-input"),
+  routineDisarmButton: document.querySelector("#routine-disarm-button"),
+  routineRecordDot: document.querySelector("#routine-record-dot"),
+  routineRecordState: document.querySelector("#routine-record-state"),
+  routineStepCount: document.querySelector("#routine-step-count"),
+  routineRecentStep: document.querySelector("#routine-recent-step"),
+  routineListBody: document.querySelector("#routine-list-body"),
+  routineReplayProgress: document.querySelector("#routine-replay-progress"),
+  routineReplayLabel: document.querySelector("#routine-replay-label"),
+  routineAbortButton: document.querySelector("#routine-abort-button"),
+  routineOperationId: document.querySelector("#routine-operation-id"),
+  routineMessage: document.querySelector("#routine-message"),
 };
 
 const state = {
@@ -73,6 +91,12 @@ const state = {
   reconnectTimer: null,
   tokenChangeTimer: null,
   estopTextTimer: null,
+  routineRecordingArmed: false,
+  routineRequestInFlight: false,
+  routineStatusRequestInFlight: false,
+  routineListRequestInFlight: false,
+  routineDeleteConfirmName: null,
+  routines: [],
 };
 
 function token() {
@@ -159,14 +183,16 @@ function errorMessage(payload, fallback) {
   return fallback;
 }
 
-async function api(path, body) {
+async function api(path, body, { method = null } = {}) {
   const hasBody = body !== undefined;
+  const requestMethod = method || (hasBody ? "POST" : "GET");
+  const sendJson = hasBody && requestMethod !== "GET";
   let response;
   try {
     response = await fetch(path, {
-      method: hasBody ? "POST" : "GET",
-      headers: authorizationHeaders({ json: hasBody }),
-      body: hasBody ? JSON.stringify(body) : undefined,
+      method: requestMethod,
+      headers: authorizationHeaders({ json: sendJson }),
+      body: sendJson ? JSON.stringify(body) : undefined,
     });
   } catch (error) {
     setServiceState("danger", "服务 无法连接");
@@ -285,7 +311,9 @@ function panelForDevice(device) {
 
 function setPanelMessage(device, text, { danger = false, success = false } = {}) {
   const panel = panelForDevice(device);
-  const message = panel ? panel.querySelector('[data-role="message"]') : null;
+  const message = device === "routine"
+    ? elements.routineMessage
+    : panel ? panel.querySelector('[data-role="message"]') : null;
   if (!message) {
     return;
   }
@@ -498,7 +526,8 @@ function updatePanelControls(device) {
   if (!panel) {
     return;
   }
-  const pending = state.panelPending.has(device);
+  const pending = state.panelPending.has(device)
+    || (device === "routine" && state.routineRequestInFlight);
   for (const control of panel.querySelectorAll("button, input, select")) {
     if (control.dataset.alwaysEnabled === "true") {
       control.disabled = false;
@@ -511,6 +540,15 @@ function updatePanelControls(device) {
       control.classList.toggle("is-active", alarmReady && !pending);
     }
   }
+
+  if (device === "routine") {
+    const armButton = panel.querySelector('[data-routine-action="arm"]');
+    if (armButton) {
+      armButton.disabled = pending || state.routineRecordingArmed;
+    }
+    elements.routineNameInput.disabled = pending || state.routineRecordingArmed;
+    elements.routineDisarmButton.disabled = pending || !state.routineRecordingArmed;
+  }
 }
 
 function setPanelPending(device, operationId) {
@@ -520,7 +558,9 @@ function setPanelPending(device, operationId) {
   }
   state.panelPending.set(device, operationId);
   panel.dataset.pending = "true";
-  const output = panel.querySelector('[data-role="operation-id"]');
+  const output = device === "routine"
+    ? elements.routineOperationId
+    : panel.querySelector('[data-role="operation-id"]');
   if (output) {
     output.hidden = false;
     output.textContent = operationId === REQUESTING_OPERATION
@@ -537,7 +577,9 @@ function clearPanelPending(device) {
     return;
   }
   delete panel.dataset.pending;
-  const output = panel.querySelector('[data-role="operation-id"]');
+  const output = device === "routine"
+    ? elements.routineOperationId
+    : panel.querySelector('[data-role="operation-id"]');
   if (output) {
     output.hidden = true;
     output.textContent = "";
@@ -553,6 +595,9 @@ function completePanelOperation(operation) {
   if (pendingId !== operation.id) {
     return;
   }
+  if (operation.device === "routine") {
+    renderRoutineReplayOperation(operation);
+  }
   clearPanelPending(operation.device);
   const elapsed = Number(operation.elapsed) || 0;
   if (operation.status === "failed") {
@@ -561,6 +606,9 @@ function completePanelOperation(operation) {
       structuredErrorMessage(operation.error, `${operationName(operation)} 失败`),
       { danger: true },
     );
+    if (operation.device === "routine") {
+      void refreshRoutineList();
+    }
     return;
   }
   setPanelMessage(
@@ -568,6 +616,9 @@ function completePanelOperation(operation) {
     `${operationName(operation)} 已完成 · ${elapsed.toFixed(1)} s`,
     { success: true },
   );
+  if (operation.device === "routine") {
+    void refreshRoutineList();
+  }
 }
 
 function showOperationConflict(error) {
@@ -616,7 +667,13 @@ async function runPanelOperation(device, label, path, body) {
   }
 }
 
-async function runImmediatePanelAction(device, label, path, body) {
+async function runImmediatePanelAction(
+  device,
+  label,
+  path,
+  body,
+  { eventKind = "立即停止" } = {},
+) {
   setPanelMessage(device, `${label}请求已直达`);
   try {
     await api(path, body);
@@ -624,7 +681,7 @@ async function runImmediatePanelAction(device, label, path, body) {
       ? "；原 operation 等待 SSE 收尾"
       : "";
     setPanelMessage(device, `${label}命令已完成${pendingSuffix}`, { success: true });
-    logEvent("立即停止", `${DEVICE_LABELS[device] || device} · ${label}`);
+    logEvent(eventKind, `${DEVICE_LABELS[device] || device} · ${label}`);
   } catch (error) {
     handlePanelError(device, label, error);
   }
@@ -633,6 +690,217 @@ async function runImmediatePanelAction(device, label, path, body) {
 function formNumber(form, name) {
   const input = form.elements.namedItem(name);
   return input instanceof HTMLInputElement ? input.valueAsNumber : Number.NaN;
+}
+
+function routineEndpoint(name, suffix = "") {
+  return `/api/routines/${encodeURIComponent(name)}${suffix}`;
+}
+
+function renderRoutineRecordingStatus(recording) {
+  if (!recording || typeof recording !== "object") {
+    return;
+  }
+  state.routineRecordingArmed = recording.armed === true;
+  elements.routineRecordDot.classList.toggle(
+    "is-danger",
+    state.routineRecordingArmed,
+  );
+  elements.routineRecordState.classList.toggle(
+    "is-danger",
+    state.routineRecordingArmed,
+  );
+  elements.routineRecordState.textContent = state.routineRecordingArmed
+    ? "录制中"
+    : "未录制";
+  const stepCount = Number(recording.step_count);
+  elements.routineStepCount.textContent = `${Number.isFinite(stepCount) ? stepCount : 0} 步`;
+
+  const recent = Array.isArray(recording.recent_steps)
+    ? recording.recent_steps
+    : [];
+  const last = recent.length > 0 ? recent[recent.length - 1] : null;
+  elements.routineRecentStep.textContent = last && typeof last.label === "string"
+    ? `最近步骤：${last.label}`
+    : "最近步骤：—";
+  updatePanelControls("routine");
+}
+
+async function refreshRoutineRecordingStatus() {
+  if (!token() || state.routineStatusRequestInFlight) {
+    return;
+  }
+  state.routineStatusRequestInFlight = true;
+  try {
+    const recording = await api("/api/routines/record");
+    renderRoutineRecordingStatus(recording);
+  } catch (error) {
+    const message = error && error.message
+      ? error.message
+      : "录制状态读取失败";
+    setPanelMessage("routine", message, { danger: true });
+  } finally {
+    state.routineStatusRequestInFlight = false;
+  }
+}
+
+function setRoutineRequestInFlight(inFlight) {
+  state.routineRequestInFlight = inFlight;
+  updatePanelControls("routine");
+}
+
+async function runRoutineRecordingRequest(label, path, body, onSuccess) {
+  if (state.routineRequestInFlight || state.panelPending.has("routine")) {
+    return;
+  }
+  setRoutineRequestInFlight(true);
+  setPanelMessage("routine", `${label}请求发送中`);
+  try {
+    const payload = await api(path, body);
+    onSuccess(payload);
+    setPanelMessage("routine", `${label}已完成`, { success: true });
+    logEvent("程序录制", label);
+  } catch (error) {
+    handlePanelError("routine", label, error);
+  } finally {
+    setRoutineRequestInFlight(false);
+  }
+}
+
+function renderRoutineList(routines) {
+  elements.routineListBody.replaceChildren();
+  if (!Array.isArray(routines) || routines.length === 0) {
+    const row = document.createElement("tr");
+    const empty = document.createElement("td");
+    empty.className = "routine-empty";
+    empty.colSpan = 5;
+    empty.textContent = "暂无程序";
+    row.append(empty);
+    elements.routineListBody.append(row);
+    updatePanelControls("routine");
+    return;
+  }
+
+  for (const routine of routines) {
+    const name = typeof routine.name === "string" ? routine.name : "未命名程序";
+    const row = document.createElement("tr");
+    row.className = "routine-row";
+    const confirming = state.routineDeleteConfirmName === name;
+    row.classList.toggle("is-delete-confirm", confirming);
+
+    const nameCell = document.createElement("td");
+    nameCell.textContent = name;
+    nameCell.title = name;
+
+    const stepsCell = document.createElement("td");
+    stepsCell.className = "numeric-reading";
+    const stepCount = Number(routine.step_count);
+    stepsCell.textContent = Number.isFinite(stepCount) ? String(stepCount) : "—";
+
+    const durationCell = document.createElement("td");
+    durationCell.className = "numeric-reading";
+    const duration = Number(routine.duration_s);
+    durationCell.textContent = Number.isFinite(duration)
+      ? duration.toFixed(1)
+      : "—";
+
+    const motionCell = document.createElement("td");
+    motionCell.className = "routine-motion";
+    motionCell.textContent = routine.has_motion === true ? "有" : "无";
+
+    const actionsCell = document.createElement("td");
+    actionsCell.className = "routine-actions";
+    const replayButton = document.createElement("button");
+    replayButton.type = "button";
+    replayButton.className = "primary-button";
+    replayButton.textContent = "重放";
+    replayButton.addEventListener("click", () => {
+      state.routineDeleteConfirmName = null;
+      elements.routineReplayProgress.textContent = `0/${Number.isFinite(stepCount) ? stepCount : 0}`;
+      elements.routineReplayLabel.textContent = "当前步骤：等待开始";
+      void runPanelOperation(
+        "routine",
+        `重放 ${name}`,
+        routineEndpoint(name, "/replay"),
+        {},
+      );
+    });
+
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.textContent = confirming ? "确认删除？" : "删除";
+    deleteButton.classList.toggle("routine-delete-confirm", confirming);
+    deleteButton.addEventListener("click", () => {
+      void requestRoutineDelete(name);
+    });
+
+    actionsCell.append(replayButton, deleteButton);
+    row.append(nameCell, stepsCell, durationCell, motionCell, actionsCell);
+    elements.routineListBody.append(row);
+  }
+  updatePanelControls("routine");
+}
+
+async function refreshRoutineList() {
+  if (!token() || state.routineListRequestInFlight) {
+    return;
+  }
+  state.routineListRequestInFlight = true;
+  try {
+    const routines = await api("/api/routines");
+    state.routines = Array.isArray(routines) ? routines : [];
+    renderRoutineList(state.routines);
+  } catch (error) {
+    const message = error && error.message ? error.message : "程序列表读取失败";
+    setPanelMessage("routine", message, { danger: true });
+  } finally {
+    state.routineListRequestInFlight = false;
+  }
+}
+
+async function requestRoutineDelete(name) {
+  if (state.routineDeleteConfirmName !== name) {
+    state.routineDeleteConfirmName = name;
+    renderRoutineList(state.routines);
+    setPanelMessage("routine", `再次点击“确认删除？”以删除 ${name}`, {
+      danger: true,
+    });
+    return;
+  }
+  if (state.routineRequestInFlight || state.panelPending.has("routine")) {
+    return;
+  }
+
+  setRoutineRequestInFlight(true);
+  setPanelMessage("routine", `正在删除 ${name}`);
+  try {
+    await api(routineEndpoint(name), undefined, { method: "DELETE" });
+    state.routineDeleteConfirmName = null;
+    setPanelMessage("routine", `${name} 已删除`, { success: true });
+    logEvent("程序删除", name);
+    await refreshRoutineList();
+  } catch (error) {
+    handlePanelError("routine", `删除 ${name}`, error);
+  } finally {
+    setRoutineRequestInFlight(false);
+  }
+}
+
+function renderRoutineReplayOperation(operation) {
+  if (!operation || operation.device !== "routine") {
+    return;
+  }
+  const progress = snapshotRecord(operation.result);
+  if (!progress) {
+    return;
+  }
+  const completed = Number(progress.steps_completed);
+  const total = Number(progress.steps_total);
+  if (Number.isFinite(completed) && Number.isFinite(total)) {
+    elements.routineReplayProgress.textContent = `${completed}/${total}`;
+  }
+  if (typeof progress.step_label === "string" && progress.step_label) {
+    elements.routineReplayLabel.textContent = `当前步骤：${progress.step_label}`;
+  }
 }
 
 function operationName(operation) {
@@ -723,6 +991,7 @@ async function refreshCurrentOperation() {
       state.operationConflict = null;
     }
     state.currentOperation = operation;
+    renderRoutineReplayOperation(operation);
     renderCurrentOperation();
   } catch {
     // api() 已把鉴权或网络状态映射到顶栏。
@@ -744,6 +1013,9 @@ function handleStatusSnapshot(snapshot) {
   if (snapshot.last_operation) {
     completePanelOperation(snapshot.last_operation);
     recordOperationCompletion(snapshot.last_operation);
+  }
+  if (state.routineRecordingArmed) {
+    void refreshRoutineRecordingStatus();
   }
   void refreshCurrentOperation();
 }
@@ -890,6 +1162,8 @@ function restartStatusStream() {
 
   setAuthMessage("等待验证");
   void connectStatusStream(revision);
+  void refreshRoutineRecordingStatus();
+  void refreshRoutineList();
 }
 
 function persistToken(value) {
@@ -1116,6 +1390,50 @@ function bindDeviceControls() {
   }
 }
 
+function bindRoutineControls() {
+  elements.routineRecordForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!elements.routineRecordForm.reportValidity()) {
+      return;
+    }
+    const name = elements.routineNameInput.value.trim();
+    if (!name) {
+      return;
+    }
+    void runRoutineRecordingRequest(
+      "开始录制",
+      "/api/routines/record/arm",
+      { name },
+      (recording) => {
+        renderRoutineRecordingStatus(recording);
+      },
+    );
+  });
+
+  elements.routineDisarmButton.addEventListener("click", () => {
+    void runRoutineRecordingRequest(
+      "停止录制并保存",
+      "/api/routines/record/disarm",
+      {},
+      (payload) => {
+        renderRoutineRecordingStatus(payload.recording);
+        state.routineDeleteConfirmName = null;
+        void refreshRoutineList();
+      },
+    );
+  });
+
+  elements.routineAbortButton.addEventListener("click", () => {
+    void runImmediatePanelAction(
+      "routine",
+      "中止重放",
+      "/api/routines/replay/abort",
+      {},
+      { eventKind: "重放中止" },
+    );
+  });
+}
+
 function bindRelayNotes() {
   for (const input of document.querySelectorAll("[data-relay-note]")) {
     const key = `${RELAY_NOTE_STORAGE_PREFIX}${input.dataset.relayNote}`;
@@ -1154,6 +1472,7 @@ elements.estopButton.addEventListener("click", () => {
 });
 
 bindDeviceControls();
+bindRoutineControls();
 bindRelayNotes();
 for (const device of elements.devicePanels.keys()) {
   updatePanelControls(device);
