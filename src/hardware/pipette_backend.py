@@ -195,7 +195,7 @@ class PipetteActionResult(BaseModel):
     """Result or dry-run description returned by a pipette physical action."""
 
     success: bool
-    action: Literal["home", "aspirate", "dispense", "eject_tip"]
+    action: Literal["home", "aspirate", "dispense", "eject_tip", "stop"]
     volume_ul: float | None = Field(
         default=None,
         ge=0,
@@ -482,6 +482,30 @@ class PipetteBackend:
             volume_ul=None,
             dry_run=False,
             action_description=action_description,
+            duration_ms=(time.monotonic() - started) * 1000.0,
+        )
+
+    def stop(self) -> PipetteActionResult:
+        """立即写 IMM_STOP（0x08），急停级动作：无幂等缓存、不等待、不做 dry_run。
+
+        柱塞停在当前位置后位置不再可信，homed 复位——继续吸/排前必须重新
+        home。供 SystemEstop 与面板急停调用。
+        """
+        self._ensure_connected()
+        started = time.monotonic()
+        try:
+            self._write_single_register(_REG_CTRL, _ACTION_IMMEDIATE_STOP)
+        except L3ConnectionError:
+            self._mark_disconnected()
+            raise
+        with self._state_lock:
+            self._homed = False
+        return self._action_result(
+            action="stop",
+            volume_ul=None,
+            dry_run=False,
+            action_description="Wrote CTRL=0x08 (IMM_STOP); plunger position "
+            "is now untrusted and the pipette requires re-homing",
             duration_ms=(time.monotonic() - started) * 1000.0,
         )
 
@@ -879,7 +903,7 @@ class PipetteBackend:
     @staticmethod
     def _action_result(
         *,
-        action: Literal["home", "aspirate", "dispense", "eject_tip"],
+        action: Literal["home", "aspirate", "dispense", "eject_tip", "stop"],
         volume_ul: float | None,
         dry_run: bool,
         action_description: str,

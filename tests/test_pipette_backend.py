@@ -492,3 +492,34 @@ def test_connect_is_idempotent_and_status_is_cached_without_bus_io() -> None:
     assert first.last_update_ms_ago is not None
     assert second.last_update_ms_ago is not None
     assert second.last_update_ms_ago >= first.last_update_ms_ago
+
+
+def test_stop_writes_imm_stop_single_frame_and_resets_homed() -> None:
+    """急停级 stop：单帧 IMM_STOP、homed 复位（W2）。"""
+    fake_bus = FakeBus(
+        [
+            SNAPSHOT_UNHOMED_RESPONSE,
+            POSITION_ZERO_RESPONSE,
+            TIP_PRESENT_RESPONSE,
+            VELOCITY_50_WRITE_REQUEST,
+            ACCEL_1250_WRITE_REQUEST,
+            DECEL_1250_WRITE_REQUEST,
+            IDLE_WRITE_REQUEST,
+            HOME_WRITE_REQUEST,
+            HOME_ACTIVE_RESPONSE,
+            HOME_DONE_RESPONSE,
+            IMM_STOP_WRITE_REQUEST,
+        ]
+    )
+    backend = _backend(fake_bus)
+    backend.connect()
+    backend.home(idempotency_key="pipette-home-before-estop-stop")
+    assert backend.status().homed is True
+    writes_before = len(fake_bus.serial.writes)
+
+    result = backend.stop()
+
+    assert fake_bus.serial.writes[writes_before:] == [IMM_STOP_WRITE_REQUEST]
+    assert result.action == "stop"
+    assert result.success is True
+    assert backend.status().homed is False

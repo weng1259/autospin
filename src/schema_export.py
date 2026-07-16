@@ -73,6 +73,7 @@ from .hardware.spincoater_backend import (
     SpincoaterRpmOutOfRangeError,
     SpinStatus,
 )
+from .system_estop import EstopReport, EstopStepReport, SystemEstop
 
 
 SCHEMA_VERSION = "1.0"
@@ -161,7 +162,15 @@ PIPETTE_PUBLIC_METHODS = [
     "aspirate",
     "dispense",
     "eject_tip",
+    "stop",
     "status",
+]
+
+
+# SystemEstop（W2）：全场急停。install_signal_handlers 是组合根设施，
+# 不进 Agent 工具面，只导出 halt_all。
+ESTOP_PUBLIC_METHODS = [
+    "halt_all",
 ]
 
 
@@ -254,6 +263,8 @@ def _export_pydantic_models() -> dict[str, Any]:
         *LINEAR_STAGE_MODELS,
         *SPINCOATER_MODELS,
         *PIPETTE_MODELS,
+        EstopReport,
+        EstopStepReport,
     ):
         out[obj.__name__] = obj.model_json_schema()
     return out
@@ -390,6 +401,11 @@ def _export_backends() -> dict[str, Any]:
             "methods": {
                 m: _export_method(SpincoaterBackend, m)
                 for m in SPINCOATER_PUBLIC_METHODS
+            },
+        },
+        "SystemEstop": {
+            "methods": {
+                m: _export_method(SystemEstop, m) for m in ESTOP_PUBLIC_METHODS
             },
         },
         "PipetteBackend": {
