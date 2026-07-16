@@ -36,6 +36,7 @@ from .gate import (
     register_operation_status_routes,
 )
 from .registry import DeviceRegistry
+from .routes_devices import register_device_routes
 from .routes_gantry import register_gantry_routes
 
 
@@ -92,6 +93,7 @@ def create_app(registry: DeviceRegistry, *, token: str) -> FastAPI:
     register_operation_status_routes(app, operation_poller)
     register_operation_routes(app, operation_gate)
     register_gantry_routes(app, registry, operation_gate)
+    register_device_routes(app, registry, operation_gate)
     app.add_middleware(BearerTokenMiddleware, token=token)
 
     @app.exception_handler(OperationConflictError)
