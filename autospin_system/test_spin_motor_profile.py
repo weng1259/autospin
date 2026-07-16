@@ -13,15 +13,28 @@ from autospin_system.maestro import Maestro
 
 __test__ = False
 
-# 用户定义的实验方案
+# ⚠️ DBLS400 是高速旋转设备。首次 bring-up 用「低速最小 profile」(START -> 100 RPM
+# HOLD 2s -> STOP)，只验证真转/方向/平衡，不冲高速。原始的多段升速 profile(冲到
+# 3000 RPM)见文件底部 LEGACY_RAMP_PROFILE，确认平衡后再单独跑。
+#
+# 提示: 本文件走 Maestro 路径(会一并初始化共享 RS485 总线上的移液/加热台与继电器)。
+# 单设备 bring-up 的实际 gate 推荐用 tools/spinmotor_bringup.py(直接驱动
+# MotorController, 串口全程开, 有 SPIN_CONFIRM 门闩 + <=300RPM 限制, 更可控)。
 TEST_PROFILE = [
+    {"type": "START", "direction": "forward", "wait": 1.0},
+    {"type": "HOLD", "speed": 100, "duration": 2.0},
+    {"type": "STOP"},
+]
+
+# 升速用(平衡确认后): 0 -> 1000 -> 3000 -> 0
+LEGACY_RAMP_PROFILE = [
     {"type": "START", "direction": "forward", "wait": 1.0},
     {"type": "RAMP", "from": 0, "to": 1000, "duration": 3.0},
     {"type": "HOLD", "speed": 1000, "duration": 2.0},
     {"type": "RAMP", "from": 1000, "to": 3000, "duration": 2.0},
     {"type": "HOLD", "speed": 3000, "duration": 2.0},
     {"type": "RAMP", "from": 3000, "to": 0, "duration": 3.0},
-    {"type": "STOP"}
+    {"type": "STOP"},
 ]
 
 
@@ -52,7 +65,8 @@ def run_debug_profile():
     logger.info(f"日志文件: {log_path}")
     # ──────────────────────────────────────────────────────────
 
-    maestro = Maestro(use_gantry=False, logger=logger,mock=True) # 模拟mock模式下开启，真实情况下mock=False
+    # mock=False: 连真硬件。首次 bring-up 务必确认卡盘装牢/清场/急停可达/PM 在场。
+    maestro = Maestro(use_gantry=False, logger=logger, mock=False)
     motor = maestro.spincoater
 
     try:
