@@ -176,6 +176,53 @@
         }
       }
     },
+    "HeaterBackend": {
+      "methods": {
+        "close": {
+          "docstring": "Close this backend and, when it was connected, the shared bus.",
+          "parameters": {},
+          "returns": "None"
+        },
+        "connect": {
+          "docstring": "Connect idempotently and read one PV value to verify the heater.",
+          "parameters": {},
+          "returns": "None"
+        },
+        "read_pv": {
+          "docstring": "Read one current-temperature snapshot from PV register 74.",
+          "parameters": {},
+          "returns": "HeaterStatus"
+        },
+        "set_sv": {
+          "docstring": "Validate and set SV; dry-run returns the exact planned writes only.",
+          "parameters": {
+            "dry_run": {
+              "default": false,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "bool"
+            },
+            "idempotency_key": {
+              "default": null,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "Optional[str]"
+            },
+            "sv_c": {
+              "kind": "positional_or_keyword",
+              "required": true,
+              "type": "float"
+            }
+          },
+          "returns": "HeaterActionResult"
+        },
+        "status": {
+          "docstring": "Return the latest PV/SV snapshot without touching the RS485 bus.",
+          "parameters": {},
+          "returns": "HeaterStatus"
+        }
+      }
+    },
     "RelayBackend": {
       "methods": {
         "ch_off": {
@@ -313,6 +360,22 @@
       "severity": "alarm",
       "suggested_action": "Repair grbl settings before attempting motion.",
       "suggested_action_zh": "grbl 关键参数不一致，请先修复参数再重新归零/运动。"
+    },
+    "HeaterCommunicationError": {
+      "docstring": "AI-516P returned a timeout, malformed frame, CRC error, or exception.",
+      "error_code": "L3.HEATER_COMMUNICATION",
+      "recoverable": true,
+      "severity": "alarm",
+      "suggested_action": "Verify the AI-516P is online in standard Modbus mode (AFC=0), then reconnect the shared RS485 bus and retry.",
+      "suggested_action_zh": "确认 AI-516P 已上电、AFC=0、地址和波特率正确，再重连共享 RS485 总线后重试。"
+    },
+    "HeaterSetpointOutOfRangeError": {
+      "docstring": "Requested heater SV exceeds the configured hard safety boundary.",
+      "error_code": "L3.HEATER_SV_OUT_OF_RANGE",
+      "recoverable": false,
+      "severity": "warning",
+      "suggested_action": "Choose a finite SV at or below heater.sv_max_c.",
+      "suggested_action_zh": "将设定温度改为不超过 heater.sv_max_c 的有限数值。"
     },
     "HomingTimeoutError": {
       "docstring": "归零或运动指令在超时窗口内未完成。",
@@ -627,6 +690,114 @@
         "commanded_state"
       ],
       "title": "GripperState",
+      "type": "object"
+    },
+    "HeaterActionResult": {
+      "description": "Result or dry-run description returned by :meth:`set_sv`.",
+      "properties": {
+        "action_description": {
+          "title": "Action Description",
+          "type": "string"
+        },
+        "dry_run": {
+          "title": "Dry Run",
+          "type": "boolean"
+        },
+        "duration_ms": {
+          "minimum": 0,
+          "title": "Duration Ms",
+          "type": "number"
+        },
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "success": {
+          "title": "Success",
+          "type": "boolean"
+        },
+        "target_sv_c": {
+          "title": "Target Sv C",
+          "type": "number"
+        }
+      },
+      "required": [
+        "success",
+        "target_sv_c",
+        "dry_run",
+        "action_description",
+        "duration_ms",
+        "event_id"
+      ],
+      "title": "HeaterActionResult",
+      "type": "object"
+    },
+    "HeaterStatus": {
+      "description": "Latest in-memory PV/SV snapshot; :meth:`status` performs no I/O.",
+      "properties": {
+        "connected": {
+          "title": "Connected",
+          "type": "boolean"
+        },
+        "last_update_ms_ago": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Age of the latest successful PV read.",
+          "title": "Last Update Ms Ago"
+        },
+        "pv_c": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Latest process value in degrees Celsius.",
+          "title": "Pv C"
+        },
+        "sv_c": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Last successfully commanded set value in degrees Celsius.",
+          "title": "Sv C"
+        },
+        "timestamp": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "UTC timestamp of the latest successful PV read.",
+          "title": "Timestamp"
+        }
+      },
+      "required": [
+        "connected"
+      ],
+      "title": "HeaterStatus",
       "type": "object"
     },
     "HomePlan": {

@@ -36,6 +36,13 @@ from .hardware import errors as err_mod
 from .hardware import types as types_mod
 from .hardware.gantry_backend import GantryBackend
 from .hardware.gripper_backend import GripperBackend
+from .hardware.heater_backend import (
+    HeaterActionResult,
+    HeaterBackend,
+    HeaterCommunicationError,
+    HeaterSetpointOutOfRangeError,
+    HeaterStatus,
+)
 from .hardware.relay_backend import RelayBackend
 
 
@@ -85,6 +92,22 @@ GRIPPER_PUBLIC_METHODS = [
 ]
 
 
+# HeaterBackend 公共方法白名单。AI-516P 温控器（共享 RS485 总线）。
+HEATER_PUBLIC_METHODS = [
+    "connect",
+    "close",
+    "read_pv",
+    "set_sv",
+    "status",
+]
+
+
+# W1.1 的硬边界禁止修改 src/hardware/types.py / errors.py，因此 Heater
+# 专属合同类型定义在 heater_backend.py，并在此显式注册。
+HEATER_MODELS = (HeaterActionResult, HeaterStatus)
+HEATER_ERRORS = (HeaterCommunicationError, HeaterSetpointOutOfRangeError)
+
+
 def _describe_type(t: Any) -> str:
     """把 typing 对象 / class 渲染成 Agent/人类可读的字符串。
 
@@ -121,7 +144,7 @@ def _describe_type(t: Any) -> str:
 
 
 def _export_pydantic_models() -> dict[str, Any]:
-    """遍历 types_mod，导出所有 BaseModel 子类的 JSON schema。"""
+    """导出共享 types_mod 及显式注册的 backend-local pydantic 模型。"""
     from pydantic import BaseModel
 
     out: dict[str, Any] = {}
@@ -134,6 +157,8 @@ def _export_pydantic_models() -> dict[str, Any]:
             and obj.__module__ == types_mod.__name__
         ):
             out[name] = obj.model_json_schema()
+    for obj in HEATER_MODELS:
+        out[obj.__name__] = obj.model_json_schema()
     return out
 
 
@@ -181,6 +206,15 @@ def _export_errors() -> dict[str, Any]:
                 "suggested_action_zh": obj.suggested_action_zh,
                 "docstring": (obj.__doc__ or "").strip(),
             }
+    for obj in HEATER_ERRORS:
+        out[obj.__name__] = {
+            "error_code": obj.error_code,
+            "severity": obj.severity,
+            "recoverable": obj.recoverable,
+            "suggested_action": obj.suggested_action,
+            "suggested_action_zh": obj.suggested_action_zh,
+            "docstring": (obj.__doc__ or "").strip(),
+        }
     return out
 
 
@@ -240,6 +274,9 @@ def _export_backends() -> dict[str, Any]:
         },
         "GripperBackend": {
             "methods": {m: _export_method(GripperBackend, m) for m in GRIPPER_PUBLIC_METHODS},
+        },
+        "HeaterBackend": {
+            "methods": {m: _export_method(HeaterBackend, m) for m in HEATER_PUBLIC_METHODS},
         },
     }
 

@@ -19,3 +19,13 @@ motion:
   move_timeout_s: 60
   # 后台状态轮询间隔（ms）。UI fragment 读内存快照，不受此值影响。
   status_poll_interval_ms: 200
+
+heater:
+  baudrate: 9600
+  timeout_s: 3.0
+  pv_register: 74
+  sv_register: 0
+  srun_register: 27
+  run_on_sv_write: true
+  scale: 10.0
+  sv_max_c: 150  # TODO PM 按 AI-516P 手册与实验需求确认
