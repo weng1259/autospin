@@ -68,8 +68,14 @@ class BearerTokenMiddleware(BaseHTTPMiddleware):
         request: Request,
         call_next: RequestResponseEndpoint,
     ) -> Response:
-        if request.method == "GET" and request.url.path == "/api/health":
-            return await call_next(request)
+        if request.method == "GET":
+            path = request.url.path
+            if (
+                path == "/api/health"
+                or path == "/"
+                or path.startswith("/static/")
+            ):
+                return await call_next(request)
 
         authorization = request.headers.get("Authorization", "")
         scheme, separator, credential = authorization.partition(" ")

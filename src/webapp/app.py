@@ -5,10 +5,12 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 import logging
 import math
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 
 def _json_safe(value: object) -> object:
@@ -38,6 +40,9 @@ from .gate import (
 from .registry import DeviceRegistry
 from .routes_devices import register_device_routes
 from .routes_gantry import register_gantry_routes
+
+
+_STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
 class HealthResponse(BaseModel):
@@ -94,6 +99,12 @@ def create_app(registry: DeviceRegistry, *, token: str) -> FastAPI:
     register_operation_routes(app, operation_gate)
     register_gantry_routes(app, registry, operation_gate)
     register_device_routes(app, registry, operation_gate)
+    app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
+
+    @app.get("/", include_in_schema=False)
+    def frontend_index() -> FileResponse:
+        return FileResponse(_STATIC_DIR / "index.html")
+
     app.add_middleware(BearerTokenMiddleware, token=token)
 
     @app.exception_handler(OperationConflictError)

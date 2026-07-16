@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>智能旋涂仪控制台</title>
+    <link rel="stylesheet" href="/static/style.css">
+  </head>
+  <body>
+    <header id="global-status-bar" class="global-status-bar" aria-label="全局状态栏">
+      <div class="status-cluster">
+        <span class="status-item">
+          <span id="service-dot" class="status-dot" aria-hidden="true"></span>
+          <span id="service-status" class="status-copy">服务 等待 token</span>
+        </span>
+        <span class="status-item status-item-secondary">
+          <span id="stream-dot" class="status-dot" aria-hidden="true"></span>
+          <span id="stream-status" class="status-copy">状态流 未连接</span>
+        </span>
+        <span class="sequence-block">
+          <span class="readout-label">SEQ</span>
+          <output id="status-seq" class="numeric-reading">— 帧</output>
+        </span>
+      </div>
+
+      <div class="current-operation" aria-live="polite">
+        <span class="operation-label">当前操作</span>
+        <span id="operation-device-action" class="operation-value is-idle">空闲</span>
+        <output id="operation-elapsed" class="numeric-reading" hidden>0.0 s</output>
+      </div>
+
+      <button id="estop-button" class="estop-button" type="button">紧急停止</button>
+    </header>
+
+    <main class="app-shell">
+      <div class="control-grid">
+        <section class="panel access-panel" aria-labelledby="access-heading">
+          <div class="section-heading">
+            <h1 id="access-heading">连接设置</h1>
+            <p>Token 仅保存在当前浏览器</p>
+          </div>
+          <div class="token-field">
+            <label for="token-input">访问 token（用于 API 鉴权）</label>
+            <input
+              id="token-input"
+              name="token"
+              type="password"
+              autocomplete="off"
+              spellcheck="false"
+              aria-describedby="auth-message"
+            >
+            <span id="auth-message" class="auth-message" aria-live="polite">未设置</span>
+          </div>
+        </section>
+
+        <section class="panel estop-report-panel" aria-labelledby="estop-report-heading">
+          <div class="section-heading">
+            <h2 id="estop-report-heading">最近急停结果</h2>
+            <output id="estop-summary" class="numeric-reading">尚无报告</output>
+          </div>
+          <div id="estop-report" class="estop-report" aria-live="polite">
+            <p class="empty-copy">点击右上角“紧急停止”后，此处逐步显示 EstopReport。</p>
+          </div>
+        </section>
+      </div>
+
+      <section class="device-section" aria-labelledby="device-heading">
+        <div class="section-heading device-heading">
+          <h2 id="device-heading">设备面板</h2>
+          <p>W3.4 仅提供布局骨架</p>
+        </div>
+        <div class="device-grid">
+          <article class="panel device-card">
+            <header><h3>龙门</h3><span class="panel-state">待接入</span></header>
+            <p>面板于 W3.5 接入</p>
+          </article>
+          <article class="panel device-card">
+            <header><h3>继电器</h3><span class="panel-state">待接入</span></header>
+            <p>面板于 W3.5 接入</p>
+          </article>
+          <article class="panel device-card">
+            <header><h3>夹爪</h3><span class="panel-state">待接入</span></header>
+            <p>面板于 W3.5 接入</p>
+          </article>
+          <article class="panel device-card">
+            <header><h3>加热台</h3><span class="panel-state">待接入</span></header>
+            <p>面板于 W3.5 接入</p>
+          </article>
+          <article class="panel device-card">
+            <header><h3>旋涂模块</h3><span class="panel-state">待接入</span></header>
+            <p>面板于 W3.5 接入</p>
+          </article>
+          <article class="panel device-card">
+            <header><h3>移液模块</h3><span class="panel-state">待接入</span></header>
+            <p>面板于 W3.5 接入</p>
+          </article>
+          <article class="panel device-card">
+            <header><h3>线性滑台</h3><span class="panel-state">待接入</span></header>
+            <p>面板于 W3.5 接入</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel event-panel" aria-labelledby="event-heading">
+        <div class="section-heading event-heading">
+          <h2 id="event-heading">事件日志</h2>
+          <output id="event-count" class="numeric-reading">0 条</output>
+        </div>
+        <ol id="event-log" class="event-log" aria-live="polite" aria-relevant="additions">
+          <li class="event-empty">尚无事件</li>
+        </ol>
+      </section>
+    </main>
+
+    <script type="module" src="/static/app.js"></script>
+  </body>
+</html>
