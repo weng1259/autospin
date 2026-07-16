@@ -204,6 +204,20 @@ def register_device_routes(
         )
 
     @app.post(
+        "/api/heater/disconnect",
+        status_code=202,
+        response_model=AcceptedOperation,
+    )
+    def heater_disconnect(
+        request: EmptyRequest = EmptyRequest(),
+    ) -> AcceptedOperation:
+        del request
+        heater = _get_heater(registry)
+        return _accepted(
+            gate.submit("heater", "disconnect", lambda _: heater.close())
+        )
+
+    @app.post(
         "/api/heater/set-sv",
         status_code=202,
         response_model=AcceptedOperation,
@@ -247,6 +261,24 @@ def register_device_routes(
                 "spincoater",
                 "connect",
                 lambda _: spincoater.connect(),
+            )
+        )
+
+    @app.post(
+        "/api/spincoater/disconnect",
+        status_code=202,
+        response_model=AcceptedOperation,
+    )
+    def spincoater_disconnect(
+        request: EmptyRequest = EmptyRequest(),
+    ) -> AcceptedOperation:
+        del request
+        spincoater = _get_spincoater(registry)
+        return _accepted(
+            gate.submit(
+                "spincoater",
+                "disconnect",
+                lambda _: spincoater.close(),
             )
         )
 
@@ -315,6 +347,20 @@ def register_device_routes(
         pipette = _get_pipette(registry)
         return _accepted(
             gate.submit("pipette", "connect", lambda _: pipette.connect())
+        )
+
+    @app.post(
+        "/api/pipette/disconnect",
+        status_code=202,
+        response_model=AcceptedOperation,
+    )
+    def pipette_disconnect(
+        request: EmptyRequest = EmptyRequest(),
+    ) -> AcceptedOperation:
+        del request
+        pipette = _get_pipette(registry)
+        return _accepted(
+            gate.submit("pipette", "disconnect", lambda _: pipette.close())
         )
 
     @app.post(
@@ -414,6 +460,24 @@ def register_device_routes(
         )
 
     @app.post(
+        "/api/linearstage/disconnect",
+        status_code=202,
+        response_model=AcceptedOperation,
+    )
+    def linear_stage_disconnect(
+        request: EmptyRequest = EmptyRequest(),
+    ) -> AcceptedOperation:
+        del request
+        linear_stage = _get_linear_stage(registry)
+        return _accepted(
+            gate.submit(
+                "linear_stage",
+                "disconnect",
+                lambda _: linear_stage.close(),
+            )
+        )
+
+    @app.post(
         "/api/linearstage/home",
         status_code=202,
         response_model=AcceptedOperation,
@@ -462,6 +526,34 @@ def register_device_routes(
         # 有意不读 gate.current()、不 submit：占用期间也必须直达 backend。
         del request
         return _get_linear_stage(registry).stop()
+
+    @app.post(
+        "/api/relay/connect",
+        status_code=202,
+        response_model=AcceptedOperation,
+    )
+    def relay_connect(
+        request: EmptyRequest = EmptyRequest(),
+    ) -> AcceptedOperation:
+        del request
+        relay = _get_relay(registry)
+        return _accepted(
+            gate.submit("relay", "connect", lambda _: relay.connect())
+        )
+
+    @app.post(
+        "/api/relay/disconnect",
+        status_code=202,
+        response_model=AcceptedOperation,
+    )
+    def relay_disconnect(
+        request: EmptyRequest = EmptyRequest(),
+    ) -> AcceptedOperation:
+        del request
+        relay = _get_relay(registry)
+        return _accepted(
+            gate.submit("relay", "disconnect", lambda _: relay.close())
+        )
 
     @app.post(
         "/api/relay/ch",

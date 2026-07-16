@@ -42,6 +42,9 @@ class _FakeHeater:
     def connect(self) -> None:
         self.calls.append(("connect",))
 
+    def close(self) -> None:
+        self.calls.append(("close",))
+
     def set_sv(
         self,
         sv_c: float,
@@ -68,6 +71,9 @@ class _FakeSpincoater:
 
     def connect(self) -> None:
         self.calls.append(("connect",))
+
+    def close(self) -> None:
+        self.calls.append(("close",))
 
     def start(
         self,
@@ -101,6 +107,9 @@ class _FakePipette:
 
     def connect(self) -> None:
         self.calls.append(("connect",))
+
+    def close(self) -> None:
+        self.calls.append(("close",))
 
     def home(self, *, idempotency_key: str | None = None) -> object:
         self.calls.append(("home", idempotency_key))
@@ -146,6 +155,9 @@ class _FakeLinearStage:
     def connect(self) -> None:
         self.calls.append(("connect",))
 
+    def close(self) -> None:
+        self.calls.append(("close",))
+
     def home(self, *, idempotency_key: str | None = None) -> object:
         self.calls.append(("home", idempotency_key))
         return {"homed": True}
@@ -182,6 +194,12 @@ class _FakeRelay:
 
     def get_state(self) -> _FakeStatus:
         return _FakeStatus()
+
+    def connect(self) -> None:
+        self.calls.append(("connect",))
+
+    def close(self) -> None:
+        self.calls.append(("close",))
 
     def ch_on(self, channel: int, *, idempotency_key: str) -> object:
         self.calls.append(("ch_on", channel, idempotency_key))
@@ -268,6 +286,7 @@ def test_all_device_endpoints_forward_typed_arguments() -> None:
 
     cases = [
         ("post", "/api/heater/connect", None),
+        ("post", "/api/heater/disconnect", None),
         (
             "post",
             "/api/heater/set-sv",
@@ -275,6 +294,7 @@ def test_all_device_endpoints_forward_typed_arguments() -> None:
         ),
         ("get", "/api/heater/pv", None),
         ("post", "/api/spincoater/connect", None),
+        ("post", "/api/spincoater/disconnect", None),
         (
             "post",
             "/api/spincoater/start",
@@ -287,6 +307,7 @@ def test_all_device_endpoints_forward_typed_arguments() -> None:
         ),
         ("get", "/api/spincoater/fault", None),
         ("post", "/api/pipette/connect", None),
+        ("post", "/api/pipette/disconnect", None),
         (
             "post",
             "/api/pipette/home",
@@ -308,6 +329,7 @@ def test_all_device_endpoints_forward_typed_arguments() -> None:
             {"idempotency_key": "eject-key"},
         ),
         ("post", "/api/linearstage/connect", None),
+        ("post", "/api/linearstage/disconnect", None),
         (
             "post",
             "/api/linearstage/home",
@@ -318,6 +340,8 @@ def test_all_device_endpoints_forward_typed_arguments() -> None:
             "/api/linearstage/move",
             {"position_mm": 12.5, "idempotency_key": "stage-move-key"},
         ),
+        ("post", "/api/relay/connect", None),
+        ("post", "/api/relay/disconnect", None),
         (
             "post",
             "/api/relay/ch",
@@ -360,17 +384,20 @@ def test_all_device_endpoints_forward_typed_arguments() -> None:
     assert stop.json()["action"] == "stop"
     assert devices.heater.calls == [
         ("connect",),
+        ("close",),
         ("set_sv", 82.5, "heater-key"),
         ("read_pv",),
     ]
     assert devices.spincoater.calls == [
         ("connect",),
+        ("close",),
         ("start", 2500.0, "spin-start-key"),
         ("stop", False, "spin-stop-key"),
         ("read_fault",),
     ]
     assert devices.pipette.calls == [
         ("connect",),
+        ("close",),
         ("home", "pipette-home-key"),
         ("aspirate", 10.5, "aspirate-key"),
         ("dispense", 8.25, "dispense-key"),
@@ -378,11 +405,14 @@ def test_all_device_endpoints_forward_typed_arguments() -> None:
     ]
     assert devices.linear_stage.calls == [
         ("connect",),
+        ("close",),
         ("home", "stage-home-key"),
         ("move_to", 12.5, "stage-move-key"),
         ("stop",),
     ]
     assert devices.relay.calls == [
+        ("connect",),
+        ("close",),
         ("ch_on", 3, "relay-on-key"),
         ("ch_off", 8, "relay-off-key"),
     ]
@@ -395,6 +425,22 @@ def test_all_device_endpoints_forward_typed_arguments() -> None:
 @pytest.mark.parametrize(
     ("device", "method", "path", "body"),
     [
+        ("heater", "post", "/api/heater/disconnect", None),
+        (
+            "spincoater",
+            "post",
+            "/api/spincoater/disconnect",
+            None,
+        ),
+        ("pipette", "post", "/api/pipette/disconnect", None),
+        (
+            "linear_stage",
+            "post",
+            "/api/linearstage/disconnect",
+            None,
+        ),
+        ("relay", "post", "/api/relay/connect", None),
+        ("relay", "post", "/api/relay/disconnect", None),
         ("heater", "get", "/api/heater/pv", None),
         ("spincoater", "get", "/api/spincoater/fault", None),
         (
@@ -525,11 +571,17 @@ def test_linear_stage_stop_bypasses_gate_during_running_move() -> None:
     ("method", "path", "body"),
     [
         ("post", "/api/heater/connect", None),
+        ("post", "/api/heater/disconnect", None),
         ("get", "/api/heater/pv", None),
         ("post", "/api/spincoater/connect", None),
+        ("post", "/api/spincoater/disconnect", None),
         ("post", "/api/pipette/connect", None),
+        ("post", "/api/pipette/disconnect", None),
         ("post", "/api/linearstage/connect", None),
+        ("post", "/api/linearstage/disconnect", None),
         ("post", "/api/linearstage/stop", None),
+        ("post", "/api/relay/connect", None),
+        ("post", "/api/relay/disconnect", None),
         (
             "post",
             "/api/relay/ch",
