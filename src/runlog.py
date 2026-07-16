@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -36,8 +38,24 @@ class RunLog:
         conn.row_factory = sqlite3.Row
         return conn
 
+    @contextmanager
+    def _connection(self) -> Iterator[sqlite3.Connection]:
+        """Return one transaction-scoped connection and always close it.
+
+        ``sqlite3.Connection``'s own context manager only commits or rolls back;
+        it does not close the connection.  Keep that transaction behaviour while
+        making the resource lifetime explicit so short-lived tests and processes
+        do not depend on garbage collection to release SQLite handles.
+        """
+        conn = self._connect()
+        try:
+            with conn:
+                yield conn
+        finally:
+            conn.close()
+
     def _init_schema(self) -> None:
-        with self._lock, self._connect() as c:
+        with self._lock, self._connection() as c:
             c.execute(
                 """
                 CREATE TABLE IF NOT EXISTS events (
@@ -66,7 +84,7 @@ class RunLog:
         event_bus 里飘走，不入库。"""
         if event.phase not in ("completed", "error"):
             return
-        with self._lock, self._connect() as c:
+        with self._lock, self._connection() as c:
             c.execute(
                 """
                 INSERT INTO events
@@ -89,7 +107,7 @@ class RunLog:
             )
 
     def query_recent(self, limit: int = 50) -> list[dict[str, Any]]:
-        with self._lock, self._connect() as c:
+        with self._lock, self._connection() as c:
             rows = c.execute(
                 "SELECT * FROM events ORDER BY seq DESC LIMIT ?", (limit,)
             ).fetchall()
