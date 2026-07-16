@@ -29,6 +29,7 @@ import argparse
 import inspect
 import json
 import sys
+import types
 from typing import Any, get_type_hints
 
 from .hardware import errors as err_mod
@@ -94,6 +95,15 @@ def _describe_type(t: Any) -> str:
         return "None"
     if t is inspect.Signature.empty:
         return "Any"
+    # PEP 604 `X | Y`：Python 3.13 的 types.UnionType 没有 __origin__，会掉进
+    # 末尾 str(t) 兜底（带全模块路径）；3.14 起并回 typing.Union 走 origin 分支。
+    # 两个版本渲染不一致会让 schema 合同 diff 假红，这里统一规范化。
+    if isinstance(t, types.UnionType):
+        args = t.__args__
+        non_none = [a for a in args if a is not type(None)]  # noqa: E721
+        if len(non_none) == 1 and len(args) == 2:
+            return f"Optional[{_describe_type(non_none[0])}]"
+        return f"Union[{', '.join(_describe_type(a) for a in non_none)}]"
     origin = getattr(t, "__origin__", None)
     if origin is not None:
         args = getattr(t, "__args__", ())

@@ -47,7 +47,7 @@
               "type": "str"
             }
           },
-          "returns": "src.hardware.types.HomeResult | src.hardware.types.HomePlan"
+          "returns": "Union[HomeResult, HomePlan]"
         },
         "is_connected": {
           "docstring": "",
@@ -92,7 +92,7 @@
               "type": "bool"
             }
           },
-          "returns": "src.hardware.types.MoveResult | src.hardware.types.MovePlan"
+          "returns": "Union[MoveResult, MovePlan]"
         },
         "recover_from_alarm": {
           "docstring": "Alarm / Hold 一键恢复。组合 `soft_reset` + `unlock_alarm` + `home`。\n\n入口状态矩阵（Slice 5 §Q2）：\n- **Alarm** → `\\x18` → (若进 alarm:11) `$X` → `$H`（主路径）\n- **Hold** → `\\x18` → `$X` → `$H`（罕见兜底——`$J=` + `\\x85` 正常\n  halt 会直接回 Idle；只有在 `$J=` 被 grbl reject 或外部客户端发了\n  `!` 时才会 stuck 在 Hold）\n- **Idle** → no-op，立即返回 `actions_taken=[]`（天然幂等）\n- **Run / Jog / Home** → raise `OperationConflictError`（先 halt）\n- **Disconnected** → raise `ConnectionError`（走 Slice 4 「🔌 重新连接」）\n\n幂等：同 `idempotency_key` **24h** 内命中缓存直接返回上次结果（recover\n内部会 home，按 home 的长 TTL 规则。见 observable.py §TTL 分级）。\nAgent session 断线重连到同一天内已恢复过的 key 必须命中，否则会再\n`$H` 归一次零，物理代价不可接受。\n\nRaises:\n    ConnectionError: 串口掉线\n    OperationConflictError: 入口状态是 Run/Jog/Home\n    AlarmStateError / HomingTimeoutError / BrakeError: 内部\n        unlock / home 失败时冒泡；PM 看到具体子错误，再决定下一步。",
