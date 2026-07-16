@@ -335,7 +335,7 @@ def _connect_full_devices(gantry_port: str) -> None:
     )
 
     st.session_state["relay"] = relay
-    st.session_state["backend"] = gantry  # 复用现有龙门 UI（jog/move/home/Z2/急停/恢复）
+    st.session_state["backend"] = gantry  # 复用现有龙门 UI（jog/move/home/急停/恢复）
     st.session_state["gripper"] = gripper
     st.session_state["rs485_lock"] = rs485_lock
     st.session_state["heater"] = heater
@@ -978,106 +978,9 @@ else:
 
     st.caption("Z 轴 jog 自动释放/锁回刹车。限位触发时该轴按钮禁用。")
 
-# ── Z2 控件 ──
-st.divider()
-st.subheader("🔽 Z2（A 轴升降台）")
-st.caption(
-    "⚠️ Z2 无限位传感器，靠软件 0–125mm 边界。A 值增大 = 向下。"
-    "距离近似（$103 标定待校），先小步试。"
-)
-
-_z2_backend = st.session_state.get("backend")
-_z2_connected = _z2_backend is not None and _z2_backend.is_connected()
-
-if not _z2_connected:
-    st.info("请先点 🔍 查状态 建立连接。")
-else:
-    _z2_inited = getattr(_z2_backend, "_z2_initialized", False)
-
-    if not _z2_inited:
-        st.warning("Z2 尚未初始化。请确认滑台在**最高点**，然后点下方按钮声明 A=0。")
-        if st.button("🔝 初始化 Z2（声明当前位置为顶部 A=0）", type="primary"):
-            try:
-                _z2_backend.initialize_z2_at_top()
-                st.toast("Z2 已初始化：A=0（顶部）", icon="✅")
-                st.rerun()
-            except L3Error as e:
-                st.session_state["last_error"] = e
-                st.rerun(scope="app")
-            except Exception as e:
-                st.session_state["last_error"] = _wrap_unexpected(e)
-                st.rerun(scope="app")
-    else:
-        _z2_pos = _z2_backend.get_status().position.z2_mm
-        st.markdown(
-            f'<div style="font-family:monospace;font-size:1.2rem;">'
-            f'Z2 (A) = {_z2_pos:+.2f} mm</div>',
-            unsafe_allow_html=True,
-        )
-
-        z2c_step, z2c_feed = st.columns(2)
-        with z2c_step:
-            z2_step = st.select_slider(
-                "Z2 步长 (mm)", options=[0.5, 1.0, 2.0, 5.0, 10.0],
-                value=1.0, key="z2_step_slider",
-            )
-        with z2c_feed:
-            z2_feed = st.select_slider(
-                "Z2 进给 (mm/min)", options=[50, 100, 200],
-                value=100, key="z2_feed_slider",
-            )
-
-        def _do_z2_move(target: float) -> None:
-            try:
-                result = _z2_backend.move_z2_to(target, feed_mm_min=float(z2_feed))
-                st.toast(f"Z2 → {result.position.z2_mm:+.2f} mm", icon="✅")
-            except L3Error as e:
-                st.session_state["last_error"] = e
-                st.rerun(scope="app")
-            except Exception as e:
-                st.session_state["last_error"] = _wrap_unexpected(e)
-                st.rerun(scope="app")
-
-        z2_up_col, z2_dn_col = st.columns(2)
-        if z2_up_col.button(
-            f"▲ Z2−{z2_step}（上）", use_container_width=True,
-            disabled=_z2_pos - z2_step < 0,
-        ):
-            _do_z2_move(_z2_pos - z2_step)
-        if z2_dn_col.button(
-            f"▼ Z2+{z2_step}（下）", use_container_width=True,
-            disabled=_z2_pos + z2_step > 125,
-        ):
-            _do_z2_move(_z2_pos + z2_step)
-
-        with st.expander("Z2 预设位置"):
-            z2_presets = [0, 25, 50, 75, 100, 125]
-            z2_preset_cols = st.columns(len(z2_presets))
-            for i, preset in enumerate(z2_presets):
-                if z2_preset_cols[i].button(
-                    f"{preset}", key=f"z2_preset_{preset}",
-                    use_container_width=True,
-                ):
-                    _do_z2_move(float(preset))
-
-            z2_custom = st.number_input(
-                "自定义 Z2 位置 (mm)", min_value=0.0, max_value=125.0,
-                value=_clamp(_z2_pos, 0.0, 125.0), step=1.0,
-                format="%.1f", key="z2_custom_input",
-            )
-            if st.button("🎯 Z2 去这里", key="z2_go_custom"):
-                _do_z2_move(float(z2_custom))
-
-        if st.button("🅿️ Z2 归位（回顶部 A=0）"):
-            try:
-                _z2_backend.park_z2(feed_mm_min=float(z2_feed))
-                st.toast("Z2 已归位 A=0", icon="✅")
-            except L3Error as e:
-                st.session_state["last_error"] = e
-                st.rerun(scope="app")
-            except Exception as e:
-                st.session_state["last_error"] = _wrap_unexpected(e)
-                st.rerun(scope="app")
+# ── Z2 控件已退役（W1.5, 2026-07-17）──
+# Z2/A 轴 2026-06-30 起由独立 Emm RS485 丝杆滑台取代（LinearStageBackend），
+# 面板控件待 W3 正式 Web 面板接入，本应急面板不再提供。
 
 # ── 去这里 ──
 st.divider()

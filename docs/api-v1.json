@@ -386,6 +386,11 @@
           "docstring": "Return the latest status snapshot without touching the RS485 bus.",
           "parameters": {},
           "returns": "PipetteStatus"
+        },
+        "stop": {
+          "docstring": "立即写 IMM_STOP（0x08），急停级动作：无幂等缓存、不等待、不做 dry_run。\n\n柱塞停在当前位置后位置不再可信，homed 复位——继续吸/排前必须重新\nhome。供 SystemEstop 与面板急停调用。",
+          "parameters": {},
+          "returns": "PipetteActionResult"
         }
       }
     },
@@ -525,6 +530,22 @@
             }
           },
           "returns": "SpinActionResult"
+        }
+      }
+    },
+    "SystemEstop": {
+      "methods": {
+        "halt_all": {
+          "docstring": "按固定顺序停住全部设备；任何一步失败都继续走完剩余步骤。",
+          "parameters": {
+            "stop_heater": {
+              "default": true,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "bool"
+            }
+          },
+          "returns": "EstopReport"
         }
       }
     }
@@ -776,6 +797,120 @@
     }
   },
   "models": {
+    "EstopReport": {
+      "$defs": {
+        "EstopStepReport": {
+          "description": "halt_all 中单台设备的处置结果。",
+          "properties": {
+            "action": {
+              "title": "Action",
+              "type": "string"
+            },
+            "device": {
+              "title": "Device",
+              "type": "string"
+            },
+            "error": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "该步失败时的人类可读错误（急停继续执行后续步骤）。",
+              "title": "Error"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "skipped": {
+              "default": false,
+              "title": "Skipped",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "device",
+            "action",
+            "ok"
+          ],
+          "title": "EstopStepReport",
+          "type": "object"
+        }
+      },
+      "description": "halt_all 的完整报告；ok=False 表示至少一步失败，需人工复核现场。",
+      "properties": {
+        "duration_ms": {
+          "minimum": 0,
+          "title": "Duration Ms",
+          "type": "number"
+        },
+        "ok": {
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/EstopStepReport"
+          },
+          "title": "Steps",
+          "type": "array"
+        }
+      },
+      "required": [
+        "ok",
+        "steps",
+        "duration_ms"
+      ],
+      "title": "EstopReport",
+      "type": "object"
+    },
+    "EstopStepReport": {
+      "description": "halt_all 中单台设备的处置结果。",
+      "properties": {
+        "action": {
+          "title": "Action",
+          "type": "string"
+        },
+        "device": {
+          "title": "Device",
+          "type": "string"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "该步失败时的人类可读错误（急停继续执行后续步骤）。",
+          "title": "Error"
+        },
+        "ok": {
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "skipped": {
+          "default": false,
+          "title": "Skipped",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "device",
+        "action",
+        "ok"
+      ],
+      "title": "EstopStepReport",
+      "type": "object"
+    },
     "GrblSettingMismatch": {
       "description": "单条 grbl `$` 参数不一致的快照。",
       "properties": {
@@ -1183,11 +1318,6 @@
               "title": "Y Mm",
               "type": "number"
             },
-            "z2_mm": {
-              "default": 0.0,
-              "title": "Z2 Mm",
-              "type": "number"
-            },
             "z_mm": {
               "title": "Z Mm",
               "type": "number"
@@ -1467,11 +1597,6 @@
               "title": "Y Mm",
               "type": "number"
             },
-            "z2_mm": {
-              "default": 0.0,
-              "title": "Z2 Mm",
-              "type": "number"
-            },
             "z_mm": {
               "title": "Z Mm",
               "type": "number"
@@ -1571,11 +1696,6 @@
               "title": "Y Mm",
               "type": "number"
             },
-            "z2_mm": {
-              "default": 0.0,
-              "title": "Z2 Mm",
-              "type": "number"
-            },
             "z_mm": {
               "title": "Z Mm",
               "type": "number"
@@ -1654,11 +1774,6 @@
               "title": "Y Mm",
               "type": "number"
             },
-            "z2_mm": {
-              "default": 0.0,
-              "title": "Z2 Mm",
-              "type": "number"
-            },
             "z_mm": {
               "title": "Z Mm",
               "type": "number"
@@ -1707,7 +1822,8 @@
             "home",
             "aspirate",
             "dispense",
-            "eject_tip"
+            "eject_tip",
+            "stop"
           ],
           "title": "Action",
           "type": "string"
@@ -1872,11 +1988,6 @@
           "title": "Y Mm",
           "type": "number"
         },
-        "z2_mm": {
-          "default": 0.0,
-          "title": "Z2 Mm",
-          "type": "number"
-        },
         "z_mm": {
           "title": "Z Mm",
           "type": "number"
@@ -1989,11 +2100,6 @@
             },
             "y_mm": {
               "title": "Y Mm",
-              "type": "number"
-            },
-            "z2_mm": {
-              "default": 0.0,
-              "title": "Z2 Mm",
               "type": "number"
             },
             "z_mm": {

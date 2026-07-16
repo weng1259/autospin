@@ -114,8 +114,8 @@ STATUS_REGEX = re.compile(
 )
 ALARM_REGEX = re.compile(r"ALARM:(\d+)")
 LIMIT_PINS_REGEX = re.compile(r"(?:^|\|)Pn:(?P<pins>[A-Za-z]+)(?:\||>)")
-Z2_MIN_MM = 0.0
-Z2_MAX_MM = 125.0
+# Z2/A 轴已于 2026-06-30 由独立 Emm RS485 丝杆滑台取代（LinearStageBackend），
+# 本 backend 恢复三轴模型（W1.5 退役；状态帧的第 4 轴数值解析后忽略）。
 
 
 def _now_ms() -> float:
@@ -147,13 +147,12 @@ class GantryBackend:
         self._sline: list[str] = []
         self._status = MachineStatus(
             state=MachineState.DISCONNECTED,
-            position=Position(x_mm=0.0, y_mm=0.0, z_mm=0.0, z2_mm=0.0),
+            position=Position(x_mm=0.0, y_mm=0.0, z_mm=0.0),
         )
         self._status_ts_ms: float = 0.0
         self._is_homed: bool = False
         self._alarm_code: Optional[int] = None
         self._last_home_ts_ms: Optional[float] = None
-        self._z2_initialized: bool = False
         self._manual_mode: bool = False
         self._pre_manual_step_idle_delay: Optional[str] = None
         # RelayBackend 共享给可能的 GripperBackend（CH1 夹爪 + CH2 Z 刹车同一 DSTUR-T80）。
@@ -263,146 +262,6 @@ class GantryBackend:
                 human_message="串口未连接",
                 agent_message=f"{action}: GantryBackend not connected.",
             )
-
-    def _assert_z2_target(self, z2_mm: float) -> None:
-        if not (Z2_MIN_MM <= z2_mm <= Z2_MAX_MM):
-            raise L3Error(
-                human_message=(
-                    f"Z2 = {z2_mm} 超出安全行程 [{Z2_MIN_MM}, {Z2_MAX_MM}] mm"
-                ),
-                agent_message=(
-                    f"Z2 target {z2_mm} mm outside safe range "
-                    f"[{Z2_MIN_MM}, {Z2_MAX_MM}]; command not sent."
-                ),
-            )
-
-    def initialize_z2_at_top(self) -> MachineStatus:
-        """Declare the current no-limit Z2 position as A0/top.
-
-        Z2 currently has no HOME sensor. This method must only be called when
-        the slide is physically at the top safe position.
-        It intentionally keeps `$22=1` so normal XYZ homing via `$H` remains
-        enabled; A/Z2 is handled by `G92 A0` plus software limits, not by
-        grbl homing.
-        """
-        self._require_connected("initialize_z2_at_top")
-        self._send_line_blocking(
-            "$X\n",
-            timeout_s=3.0,
-            timeout_msg="$X 未在 3s 内返回 ok",
-        )
-        self._send_line_blocking(
-            "$20=0\n",
-            timeout_s=3.0,
-            timeout_msg="$20=0 未在 3s 内返回 ok",
-        )
-        self._send_line_blocking(
-            "$21=0\n",
-            timeout_s=3.0,
-            timeout_msg="$21=0 未在 3s 内返回 ok",
-        )
-        self._send_line_blocking(
-            "$22=1\n",
-            timeout_s=3.0,
-            timeout_msg="$22=1 未在 3s 内返回 ok",
-        )
-        self._send_line_blocking(
-            "G92 A0\n",
-            timeout_s=3.0,
-            timeout_msg="G92 A0 未在 3s 内返回 ok",
-        )
-        self._z2_initialized = True
-        try:
-            self._poll_status_sync(timeout_s=1.0)
-        except Exception:
-            pass
-        return self.get_status()
-
-    def declare_z2_position(self, z2_mm: float) -> MachineStatus:
-        """Declare the current no-limit Z2 position as an absolute A coordinate.
-
-        This is for recovery/calibration after Z2 was moved outside this web
-        controller. It sends `G92 A...` only; it does not move the A/Z2 axis.
-        """
-        target = float(z2_mm)
-        self._require_connected("declare_z2_position")
-        self._assert_z2_target(target)
-        self._send_line_blocking(
-            "$X\n",
-            timeout_s=3.0,
-            timeout_msg="$X did not return ok within 3s",
-        )
-        self._send_line_blocking(
-            f"G92 A{target:.3f}\n",
-            timeout_s=3.0,
-            timeout_msg=f"G92 A{target:.3f} did not return ok within 3s",
-        )
-        self._z2_initialized = True
-        try:
-            self._poll_status_sync(timeout_s=1.0)
-        except Exception:
-            pass
-        return self.get_status()
-
-    def move_z2_to(
-        self,
-        z2_mm: float,
-        *,
-        feed_mm_min: float = 100.0,
-        timeout_s: float = 30.0,
-    ) -> MachineStatus:
-        """Move the added Z2 rail as grbl A axis, using absolute A coordinates."""
-        self._require_connected("move_z2_to")
-        if self._manual_mode:
-            raise L3Error(
-                human_message="导轨处于人工模式，请先退出人工模式再移动 Z2",
-                agent_message="move_z2_to rejected because manual mode is active.",
-            )
-        self._assert_z2_target(float(z2_mm))
-        if feed_mm_min <= 0:
-            raise L3Error(
-                human_message=f"Z2 进给速度 {feed_mm_min} 必须为正数",
-                agent_message=f"feed_mm_min={feed_mm_min} is not positive.",
-            )
-        if not self._z2_initialized:
-            raise L3Error(
-                human_message="Z2 尚未初始化 A0，请先确认滑台在最高点并调用 initialize_z2_at_top()",
-                agent_message="Z2 origin unknown; call initialize_z2_at_top() before motion.",
-            )
-
-        self._send_line_blocking(
-            "G90\n",
-            timeout_s=3.0,
-            timeout_msg="G90 未在 3s 内返回 ok",
-        )
-        self._send_line_blocking(
-            f"G0 A{float(z2_mm):.3f} F{float(feed_mm_min):.0f}\n",
-            timeout_s=max(5.0, timeout_s),
-            timeout_msg=f"Z2 移动未在 {timeout_s}s 内 ack",
-        )
-        self._wait_idle(timeout_s=timeout_s)
-        try:
-            self._poll_status_sync(timeout_s=1.0)
-        except Exception:
-            pass
-        return self.get_status()
-
-    def move_z2_rel(
-        self,
-        dz2_mm: float,
-        *,
-        feed_mm_min: float = 100.0,
-        timeout_s: float = 30.0,
-    ) -> MachineStatus:
-        current = self.get_status().position.z2_mm
-        return self.move_z2_to(
-            current + float(dz2_mm),
-            feed_mm_min=feed_mm_min,
-            timeout_s=timeout_s,
-        )
-
-    def park_z2(self, *, feed_mm_min: float = 100.0) -> MachineStatus:
-        return self.move_z2_to(Z2_MIN_MM, feed_mm_min=feed_mm_min)
 
     def manual_jog_rel(
         self,
@@ -609,7 +468,7 @@ class GantryBackend:
         self._require_connected("enter_manual_mode")
         if release_z:
             raise L3Error(
-                human_message="人工模式不允许释放 Z/Z2 垂直轴",
+                human_message="人工模式不允许释放 Z 垂直轴",
                 agent_message=(
                     "enter_manual_mode(release_z=True) rejected; vertical axes "
                     "must remain locked unless dedicated safety hardware exists."
@@ -1571,7 +1430,6 @@ class GantryBackend:
             state = MachineState.UNKNOWN
         bf_planner = m.group("bf_planner")
         bf_rx = m.group("bf_rx")
-        ma = m.group("ma")
         limit_pins = self._parse_limit_pins(raw)
         self._status = MachineStatus(
             state=state,
@@ -1579,7 +1437,6 @@ class GantryBackend:
                 x_mm=float(m.group("mx")),
                 y_mm=float(m.group("my")),
                 z_mm=float(m.group("mz")),
-                z2_mm=float(ma) if ma is not None else self._status.position.z2_mm,
             ),
             alarm_code=self._alarm_code,
             is_homed=self._is_homed,

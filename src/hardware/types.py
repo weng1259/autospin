@@ -32,7 +32,6 @@ class Position(BaseModel):
     x_mm: float
     y_mm: float
     z_mm: float
-    z2_mm: float = 0.0
 
 
 class MachineStatus(BaseModel):
