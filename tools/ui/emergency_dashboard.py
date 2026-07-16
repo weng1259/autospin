@@ -31,6 +31,14 @@ from src.hardware.errors import (  # noqa: E402
 from src.hardware.gantry_backend import GantryBackend  # noqa: E402
 from src.hardware.types import MachineState, Position  # noqa: E402
 from src.runlog import RUNLOG  # noqa: E402
+from src.routine import (  # noqa: E402
+    PlayerOptions,
+    RoutinePlayer,
+    RoutineRecorder,
+    list_routines,
+    load_routine,
+    save_routine,
+)
 from tools.ui.error_actions import _action_recover, get_action  # noqa: E402
 
 # ── 全设备集成新增依赖（task-panel-full-device-integration）──
@@ -85,15 +93,14 @@ STATE_DISPLAY: dict[MachineState, tuple[str, str]] = {
 # Pi udev 稳定名（system_config.yaml / /etc/udev/rules.d/*autospin*）。两个 CH340
 # 靠物理 USB 口区分，别用 by-id（会和 RS485 模块撞）。
 FULL_GANTRY_PORT = "/dev/autospin_xyz"    # grbl-Mega-5X CH340（龙门独占）
-FULL_RELAY_PORT = "/dev/autospin_relay"   # DSTUR-T80 STM32（夹爪 CH1 + Z刹车 CH2 + 工艺 CH3-8）
+FULL_RELAY_PORT = "/dev/autospin_relay"   # DSTUR-T80 STM32（夹爪 CH1 + Z刹车 CH2 + 真空泵 CH3 + 工艺 CH4-8）
 FULL_RS485_PORT = "/dev/autospin_rs485"   # CH340 RS485（加热 slave3 + 旋涂 slave2 共享，一把 lock）
 
 GRIPPER_CHANNEL = 1                       # CH1=夹爪（固定，gripper_hardware.md）
-PROCESS_CHANNELS = (3, 4, 5, 6, 7, 8)     # CH2=Z刹车固定；工艺通道只在 3-8 分配
-# best-guess 标签（师兄 config 有冲突：nitrogen=2 撞 z_brake、pump=3 撞 vacuum=3）。
-# PM 现场听吸合声 / 看执行器逐个敲定后在面板里回填。
+VACUUM_CHANNEL = 3                        # CH3=真空泵（PM 2026-06-29 确认）：通电 ON=泵开=吸附薄片于旋涂台，断电 OFF=释放
+PROCESS_CHANNELS = (4, 5, 6, 7, 8)        # CH1=夹爪 / CH2=Z刹车 / CH3=真空泵 固定；其余工艺通道在 4-8 分配
+# best-guess 标签，PM 现场听吸合声 / 看执行器逐个敲定后在面板里回填。
 PROCESS_CHANNEL_DEFAULT_LABELS = {
-    3: "vacuum/pump?",
     4: "spin_power?",
     5: "aux_light?",
     6: "备用 CH6",
@@ -557,6 +564,233 @@ def live_position() -> None:
 
 
 live_position()
+
+# ── 🎬 示教 / 录制 & 自动运行（src/routine.py）──────────────────────────────
+st.divider()
+st.subheader("🎬 示教 / 录制 & 自动运行")
+
+# 录制器跨 rerun 存活；首次创建即 arm（全手动：每步显式「记录」才进程序）
+if "rec" not in st.session_state:
+    _r0 = RoutineRecorder()
+    _r0.arm()
+    st.session_state["rec"] = _r0
+rec: RoutineRecorder = st.session_state["rec"]
+
+_teach_backend = st.session_state.get("backend")
+_play_prog = st.session_state.get("play_progress")
+_play_running = bool(_play_prog and _play_prog.get("running"))
+
+st.caption(
+    "全手动示教：用上面各区操作机器（jog 对准、设温…），到位后回这里点对应「📌 记录」"
+    "把**当前这一步**快照进程序。运动只记**绝对到位点**（怎么对准的过程不记），回放时才真执行。"
+)
+
+with st.expander(f"📌 记录步骤（当前 {rec.step_count} 步）", expanded=True):
+    # 1) 到位点（抓当前绝对坐标 → move_to）
+    _wp_name, _wp_feed, _wp_btn = st.columns([2, 1, 1])
+    _wp_label = _wp_name.text_input(
+        "点名", key="teach_wp_name", label_visibility="collapsed",
+        placeholder="点名（可选，如 取样点A）",
+    )
+    _wp_feed_v = _wp_feed.number_input(
+        "进给", min_value=1.0, max_value=float(CFG.motion.max_feed_mm_min),
+        value=float(CFG.motion.default_feed_mm_min), step=100.0,
+        key="teach_wp_feed", label_visibility="collapsed",
+    )
+    if _wp_btn.button(
+        "📍 记录到位点", use_container_width=True, key="teach_rec_wp",
+        disabled=_teach_backend is None or not _teach_backend.is_connected(),
+        help="抓取当前 XYZ 绝对坐标为一个 move_to 步（先用上面 Jog/去这里 对准）",
+    ):
+        try:
+            _pos = _teach_backend.get_position()
+            _lbl = f"去「{_wp_label}」" if _wp_label else ""
+            rec.record("gantry", "move_to", args=(_pos,),
+                       kwargs={"feed_mm_min": float(_wp_feed_v)}, label=_lbl)
+            st.toast(f"📍 到位点 X={_pos.x_mm:+.2f} Y={_pos.y_mm:+.2f} Z={_pos.z_mm:+.2f}", icon="📍")
+            st.rerun()
+        except Exception as _e:
+            st.error(f"记录到位点失败：{type(_e).__name__}: {_e}")
+
+    # 2) 夹爪
+    _gw1, _gw2 = st.columns(2)
+    if _gw1.button("📌 记录：夹爪夹紧", use_container_width=True, key="teach_grip_close"):
+        rec.record("gripper", "close"); st.rerun()
+    if _gw2.button("📌 记录：夹爪松开", use_container_width=True, key="teach_grip_open"):
+        rec.record("gripper", "open"); st.rerun()
+
+    # 2.5) 真空泵（CH3 专属）
+    _vw1, _vw2 = st.columns(2)
+    if _vw1.button("📌 记录：真空吸附", use_container_width=True, key="teach_vac_on"):
+        rec.record("relay", "ch_on", kwargs={"channel": VACUUM_CHANNEL}, label="真空吸附（CH3 ON）"); st.rerun()
+    if _vw2.button("📌 记录：真空释放", use_container_width=True, key="teach_vac_off"):
+        rec.record("relay", "ch_off", kwargs={"channel": VACUUM_CHANNEL}, label="真空释放（CH3 OFF）"); st.rerun()
+
+    # 3) 其它工艺继电器 CH4-8
+    _rc_ch, _rc_act, _rc_btn = st.columns([1, 1, 1])
+    _rc_channel = _rc_ch.number_input("通道", min_value=4, max_value=8, value=4, step=1, key="teach_relay_ch")
+    _rc_on = _rc_act.radio("动作", ["开", "关"], horizontal=True, key="teach_relay_act", label_visibility="collapsed")
+    if _rc_btn.button("📌 记录继电器", use_container_width=True, key="teach_rec_relay"):
+        rec.record("relay", "ch_on" if _rc_on == "开" else "ch_off",
+                   kwargs={"channel": int(_rc_channel)}); st.rerun()
+
+    # 4) 加热设温
+    _ht_v, _ht_btn = st.columns([2, 1])
+    _ht_temp = _ht_v.number_input("加热设定 (℃)", min_value=0.0, max_value=120.0, value=40.0, step=5.0, key="teach_heat_t")
+    if _ht_btn.button("📌 记录加热设温", use_container_width=True, key="teach_rec_heat"):
+        rec.record("heater", "write_sv", kwargs={"temp_c": float(_ht_temp)}); st.rerun()
+
+    # 5) 旋涂（多步序列：解锁→启动→设速→停止→锁定）
+    _sp_act, _sp_rpm, _sp_btn = st.columns([1.6, 1, 1])
+    _spin_choice = _sp_act.selectbox(
+        "旋涂动作",
+        ["解锁 unlock", "启动 start(forward)", "设速 set_speed", "停止 stop", "锁定 lock", "急停 emergency_stop"],
+        key="teach_spin_act", label_visibility="collapsed",
+    )
+    _spin_rpm_v = _sp_rpm.number_input("RPM", min_value=0, max_value=SPIN_MAX_RPM_PANEL, value=SPIN_DEFAULT_RPM, step=50, key="teach_spin_rpm")
+    if _sp_btn.button("📌 记录旋涂步", use_container_width=True, key="teach_rec_spin"):
+        _spin_map = {
+            "解锁 unlock": ("unlock", {}),
+            "启动 start(forward)": ("start", {"direction": "forward"}),
+            "设速 set_speed": ("set_speed", {"rpm": float(_spin_rpm_v)}),
+            "停止 stop": ("stop", {}),
+            "锁定 lock": ("lock", {}),
+            "急停 emergency_stop": ("emergency_stop", {}),
+        }
+        _sa, _skw = _spin_map[_spin_choice]
+        rec.record("spin", _sa, kwargs=_skw); st.rerun()
+
+    # 6) 等待（保温 / 旋涂时长）
+    _wt_v, _wt_btn = st.columns([2, 1])
+    _wt_sec = _wt_v.number_input("等待 (秒)", min_value=0.0, max_value=3600.0, value=5.0, step=1.0, key="teach_wait_s")
+    if _wt_btn.button("⏱ 插入等待", use_container_width=True, key="teach_rec_wait"):
+        rec.add_wait(float(_wt_sec)); st.rerun()
+
+# 步骤列表 + 编辑
+if rec.step_count == 0:
+    st.info("程序为空。用上面的「📌 记录」按钮逐步搭建。")
+else:
+    _steps_df = pd.DataFrame(
+        [{"#": s.seq + 1, "设备": s.device, "动作": s.action, "说明": s.label} for s in rec.steps]
+    )
+    st.dataframe(_steps_df, use_container_width=True, hide_index=True)
+    _ed1, _ed2 = st.columns(2)
+    if _ed1.button("↩ 删除最后一步", use_container_width=True, key="teach_del_last", disabled=_play_running):
+        rec.remove_last(); st.rerun()
+    if _ed2.button("🗑 清空程序", use_container_width=True, key="teach_clear", disabled=_play_running):
+        rec.clear(); st.rerun()
+
+# 保存 / 程序库
+_sv_name, _sv_btn = st.columns([2, 1])
+_save_name = _sv_name.text_input("程序名", value="演示流程", key="teach_save_name", label_visibility="collapsed")
+if _sv_btn.button("💾 保存程序", use_container_width=True, key="teach_save", disabled=rec.step_count == 0):
+    try:
+        _p = save_routine(rec.to_routine(name=_save_name or "演示流程"))
+        st.toast(f"已保存：{_p.name}", icon="💾")
+    except Exception as _e:
+        st.error(f"保存失败：{type(_e).__name__}: {_e}")
+
+_lib = list_routines()
+if _lib:
+    _by_name = {p.stem: p for p in _lib}
+    _ld_sel, _ld_btn, _del_btn = st.columns([2, 1, 1])
+    _pick = _ld_sel.selectbox("程序库", list(_by_name), key="teach_lib_pick", label_visibility="collapsed")
+    if _ld_btn.button("📂 加载到编辑器", use_container_width=True, key="teach_load", disabled=_play_running):
+        try:
+            _loaded = load_routine(_pick)
+            rec.set_steps(_loaded.steps)
+            st.toast(f"已加载 {_loaded.name}（{len(_loaded.steps)} 步）", icon="📂")
+            st.rerun()
+        except Exception as _e:
+            st.error(f"加载失败：{type(_e).__name__}: {_e}")
+    if _del_btn.button("🗑 删除文件", use_container_width=True, key="teach_del_file", disabled=_play_running):
+        try:
+            _by_name[_pick].unlink()
+            st.toast(f"已删除 {_pick}.json", icon="🗑")
+            st.rerun()
+        except Exception as _e:
+            st.error(f"删除失败：{type(_e).__name__}: {_e}")
+
+# ── ▶ 自动运行 ──
+st.markdown("**▶ 自动运行**")
+_run_homed = st.checkbox("运动前要求已归零（限位安全）", value=True, key="teach_run_homed")
+_run_delay = st.slider("步间停顿 (秒)", 0.0, 3.0, 0.5, 0.1, key="teach_run_delay")
+_run_c, _abort_c = st.columns(2)
+if _run_c.button(
+    "▶ 自动运行当前程序", type="primary", use_container_width=True, key="teach_run",
+    disabled=rec.step_count == 0 or _play_running,
+):
+    _routine = rec.to_routine(name=_save_name or "演示流程")
+    _backends = {
+        k: st.session_state.get(v)
+        for k, v in {"gantry": "backend", "gripper": "gripper", "relay": "relay",
+                     "heater": "heater", "spin": "spin"}.items()
+    }
+    _backends = {k: v for k, v in _backends.items() if v is not None}
+    _abort_evt = threading.Event()
+    _progress = {"current": 0, "total": len(_routine.steps), "label": "", "running": True, "result": None}
+    st.session_state["play_abort"] = _abort_evt
+    st.session_state["play_progress"] = _progress
+    st.session_state["play_done_ack"] = False
+    _player = RoutinePlayer(_backends)
+    _opts = PlayerOptions(step_delay_s=float(_run_delay), require_homed=bool(_run_homed))
+
+    def _do_play(routine=_routine, player=_player, opts=_opts, progress=_progress, abort_evt=_abort_evt):
+        def _cb(i, total, step):
+            progress["current"] = i
+            progress["total"] = total
+            progress["label"] = step.label
+        progress["result"] = player.run(routine, opts, progress_cb=_cb, abort_check=abort_evt.is_set)
+        progress["running"] = False
+
+    threading.Thread(target=_do_play, daemon=True).start()
+    st.rerun()
+
+if _abort_c.button("🛑 中止运行", use_container_width=True, key="teach_abort", disabled=not _play_running):
+    _evt = st.session_state.get("play_abort")
+    if _evt is not None:
+        _evt.set()
+    _b = st.session_state.get("backend")
+    if _b is not None:
+        try:
+            _b.halt()           # 停在途中的龙门运动
+        except Exception:
+            pass
+    _sp = st.session_state.get("spin")
+    if _sp is not None:
+        try:
+            _sp.emergency_stop()  # 旋涂抱闸急停
+        except Exception:
+            pass
+    st.toast("已请求中止运行", icon="🛑")
+
+
+@st.fragment(run_every="0.5s")
+def _play_status() -> None:
+    p = st.session_state.get("play_progress")
+    if not p:
+        return
+    if p.get("running"):
+        _total = max(int(p.get("total", 1)), 1)
+        st.progress(min(p.get("current", 0) / _total, 1.0),
+                    text=f"🏃 运行中 {p.get('current', 0)}/{_total} · {p.get('label', '')}")
+        return
+    _res = p.get("result")
+    if _res is None:
+        return
+    if getattr(_res, "success", False):
+        st.success(f"✅ 完成全部 {_res.steps_total} 步")
+    elif getattr(_res, "aborted", False):
+        st.warning(f"⏹ 已中止：完成 {_res.steps_completed}/{_res.steps_total} 步")
+    else:
+        st.error(f"❌ {_res.error}")
+    # 运行刚结束：触发一次全局 rerun 让「运行」按钮重新可用
+    if not st.session_state.get("play_done_ack"):
+        st.session_state["play_done_ack"] = True
+        st.rerun(scope="app")
+
+
+_play_status()
 
 # ── 机器状态（完整卡片，手动刷新）──
 st.divider()
@@ -1024,6 +1258,43 @@ else:
                 st.error(f"❗ CH{_ch} {type(e).__name__}: {e}")
     st.caption(
         "⚠️ CH3-8 直接通断 24V 输出，先确认接的执行器（真空泵/氮气阀/spin电源…）安全再开。"
+    )
+
+# ── 真空泵（继电器 CH3 · 吸附旋涂台薄片）──
+st.divider()
+st.subheader("🌪 真空泵（CH3 · 吸附旋涂台薄片）")
+
+_vac_relay = st.session_state.get("relay")
+if _vac_relay is None:
+    st.info("请先点上面 🔗 连接全部设备。")
+else:
+    _vac_on = bool(_vac_relay.get_state().channels.get(VACUUM_CHANNEL, False))
+    st.markdown(
+        f'<div style="font-size:1.1rem;color:{"#1c5fb4" if _vac_on else "#888"};font-weight:700;">'
+        f'{"🌪 吸附中 (CH3=ON · 泵开)" if _vac_on else "⚪ 已释放 (CH3=OFF · 泵关)"}</div>',
+        unsafe_allow_html=True,
+    )
+    _vc_on, _vc_off = st.columns(2)
+    if _vc_on.button("🌪 吸附（泵开）", type="primary", use_container_width=True, key="vac_on", disabled=_vac_on):
+        try:
+            _vac_relay.ch_on(VACUUM_CHANNEL, idempotency_key=_idem())
+            st.toast("真空泵开 → 吸附薄片", icon="🌪")
+            st.rerun()
+        except L3Error as e:
+            st.error(f"❗ {e.human_message}")
+        except Exception as e:
+            st.error(f"❗ {type(e).__name__}: {e}")
+    if _vc_off.button("⚪ 释放（泵关）", use_container_width=True, key="vac_off", disabled=not _vac_on):
+        try:
+            _vac_relay.ch_off(VACUUM_CHANNEL, idempotency_key=_idem())
+            st.toast("真空泵关 → 释放", icon="⚪")
+            st.rerun()
+        except L3Error as e:
+            st.error(f"❗ {e.human_message}")
+        except Exception as e:
+            st.error(f"❗ {type(e).__name__}: {e}")
+    st.caption(
+        "CH3 通电=泵开=吸附薄片于旋涂台；断电=释放。典型流程：装样 → 吸附 → 旋涂 → 释放 → 取样。"
     )
 
 # ── 加热台 AI-516（RS485 slave3，共享 lock）──

@@ -54,3 +54,7 @@ tools/_stability_logs/
 
 # 149MB 产品画册 PDF：超 GitHub 100MB 限，剔出仓，实体备份 ~/autospin-assets/
 hardware/龙门架/产品画册.pdf
+
+# 运行时产物
+streamlit.log
+*.bak.2*
