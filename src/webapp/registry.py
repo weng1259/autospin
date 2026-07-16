@@ -35,8 +35,44 @@ class DeviceRegistry:
 
     @classmethod
     def from_mocks(cls) -> DeviceRegistry:
-        """构造不打开串口、不实例化真实 backend 的骨架注册表。"""
-        return cls(mock=True)
+        """构造接入七个纯内存设备的 mock 注册表。"""
+        from typing import cast
+
+        from .mock_devices import (
+            MockGantry,
+            MockGripper,
+            MockHeater,
+            MockLinearStage,
+            MockPipette,
+            MockRelay,
+            MockSpincoater,
+        )
+
+        gantry = cast(GantryBackend, MockGantry())
+        relay = cast(RelayBackend, MockRelay())
+        gripper = cast(GripperBackend, MockGripper())
+        heater = cast(HeaterBackend, MockHeater())
+        spincoater = cast(SpincoaterBackend, MockSpincoater())
+        pipette = cast(PipetteBackend, MockPipette())
+        linear_stage = cast(LinearStageBackend, MockLinearStage())
+        estop = SystemEstop(
+            gantry=gantry,
+            spincoater=spincoater,
+            linear_stage=linear_stage,
+            pipette=pipette,
+            heater=heater,
+        )
+        return cls(
+            gantry=gantry,
+            relay=relay,
+            gripper=gripper,
+            heater=heater,
+            spincoater=spincoater,
+            pipette=pipette,
+            linear_stage=linear_stage,
+            estop=estop,
+            mock=True,
+        )
 
     @classmethod
     def from_config(cls) -> DeviceRegistry:

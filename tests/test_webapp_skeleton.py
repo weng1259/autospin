@@ -145,7 +145,7 @@ def test_create_app_instances_do_not_share_registry_or_routes() -> None:
 
 
 def test_registry_mock_constructor_has_no_real_backends() -> None:
-    registry = DeviceRegistry.from_mocks()
+    registry = DeviceRegistry(estop=SystemEstop(), mock=True)
 
     assert registry.mock is True
     assert registry.gantry is None

@@ -309,7 +309,10 @@ def test_completed_operation_is_visible_in_status_snapshot() -> None:
 
 
 def test_unattached_gantry_returns_structured_503_without_taking_gate() -> None:
-    app = create_app(DeviceRegistry.from_mocks(), token=TOKEN)
+    app = create_app(
+        DeviceRegistry(estop=SystemEstop(), mock=True),
+        token=TOKEN,
+    )
 
     with TestClient(app) as client:
         response = client.post("/api/gantry/connect", headers=AUTH_HEADERS)

@@ -18,6 +18,7 @@ from src.hardware.linearstage_backend import (
 from src.hardware.pipette_backend import PipetteBackend
 from src.hardware.relay_backend import RelayBackend
 from src.hardware.spincoater_backend import SpincoaterBackend
+from src.system_estop import SystemEstop
 from src.webapp import DeviceRegistry, create_app
 
 
@@ -595,7 +596,10 @@ def test_unattached_device_returns_structured_503(
     path: str,
     body: dict[str, object] | None,
 ) -> None:
-    app = create_app(DeviceRegistry.from_mocks(), token=TOKEN)
+    app = create_app(
+        DeviceRegistry(estop=SystemEstop(), mock=True),
+        token=TOKEN,
+    )
 
     with TestClient(app) as client:
         response = (
