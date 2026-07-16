@@ -29,3 +29,26 @@ heater:
   run_on_sv_write: true
   scale: 10.0
   sv_max_c: 150  # TODO PM 按 AI-516P 手册与实验需求确认
+
+spincoater:
+  baudrate: 9600
+  timeout_s: 0.5
+  control_register: 32768  # 0x8000
+  speed_set_register: 32773  # 0x8005
+  fault_register: 32795  # 0x801B
+  pole_pairs: 4
+  speed_factor: 2.5  # 仅用于 0x8018 实际转速回读解码(raw*20/8极); 0x8005 写入直收 RPM 原值, 与写路径无关
+  max_rpm: 3000  # TODO PM 按工艺需求确认
+
+pipette:
+  # 28 系列 1k 型号与厂家手册均给出最大量程 1000 uL。
+  max_volume_ul: 1000
+  baudrate: 115200
+  timeout_s: 2.0
+  home_timeout_s: 30.0
+  action_timeout_s: 10.0
+  poll_interval_s: 0.1
+  # 手册 §5.1.2 建议值；旧 10/20/20 会让 home 误超时。
+  speed_01rps: 50
+  accel_01rpss: 1250
+  decel_01rpss: 1250

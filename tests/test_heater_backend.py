@@ -40,6 +40,9 @@ class FakeSerial:
     def flush(self) -> None:
         return None
 
+    def reset_input_buffer(self) -> None:
+        return None
+
     def read(self, size: int) -> bytes:
         if not self.responses:
             return b""

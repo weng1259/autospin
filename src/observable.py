@@ -80,6 +80,11 @@ def _make_wrapper(method: Callable[P, R], ttl_s: int) -> Callable[P, R]:
         method_name = f"{type(self_obj).__name__}.{method.__name__}"
         idem_key_val = kwargs.get("idempotency_key")
         idem_key = idem_key_val if isinstance(idem_key_val, str) else None
+        # dry_run 预演不进幂等缓存：否则"先 dry_run 预演、再同 key 真执行"会
+        # 命中缓存把真执行静默吞掉——Agent 的标准用法正是这个顺序（2026-07-16
+        # 审查修正，读写两侧一起跳过）。
+        if bool(kwargs.get("dry_run")):
+            idem_key = None
 
         # ── idempotency short-circuit ──
         if idem_key is not None:

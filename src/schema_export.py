@@ -43,7 +43,25 @@ from .hardware.heater_backend import (
     HeaterSetpointOutOfRangeError,
     HeaterStatus,
 )
+from .hardware.pipette_backend import (
+    PipetteActionResult,
+    PipetteActionTimeoutError,
+    PipetteBackend,
+    PipetteCommunicationError,
+    PipetteNotHomedError,
+    PipetteStatus,
+    PipetteTipMissingError,
+    PipetteVolumeOutOfRangeError,
+)
 from .hardware.relay_backend import RelayBackend
+from .hardware.spincoater_backend import (
+    SpinActionResult,
+    SpincoaterBackend,
+    SpincoaterCommunicationError,
+    SpincoaterFaultError,
+    SpincoaterRpmOutOfRangeError,
+    SpinStatus,
+)
 
 
 SCHEMA_VERSION = "1.0"
@@ -102,10 +120,51 @@ HEATER_PUBLIC_METHODS = [
 ]
 
 
+# SpincoaterBackend 公共方法白名单。DBLS400（共享 RS485 总线）。
+SPINCOATER_PUBLIC_METHODS = [
+    "connect",
+    "close",
+    "start",
+    "stop",
+    "read_fault",
+    "status",
+]
+
+
+# PipetteBackend 公共方法白名单。28 系列移液枪（共享 RS485 总线）。
+PIPETTE_PUBLIC_METHODS = [
+    "connect",
+    "close",
+    "home",
+    "aspirate",
+    "dispense",
+    "eject_tip",
+    "status",
+]
+
+
 # W1.1 的硬边界禁止修改 src/hardware/types.py / errors.py，因此 Heater
 # 专属合同类型定义在 heater_backend.py，并在此显式注册。
 HEATER_MODELS = (HeaterActionResult, HeaterStatus)
 HEATER_ERRORS = (HeaterCommunicationError, HeaterSetpointOutOfRangeError)
+
+# W1.2 同样只允许注册性修改，Spincoater 专属合同类型留在 backend 文件。
+SPINCOATER_MODELS = (SpinActionResult, SpinStatus)
+SPINCOATER_ERRORS = (
+    SpincoaterCommunicationError,
+    SpincoaterFaultError,
+    SpincoaterRpmOutOfRangeError,
+)
+
+# W1.3 同样只允许注册性修改，Pipette 专属合同类型留在 backend 文件。
+PIPETTE_MODELS = (PipetteActionResult, PipetteStatus)
+PIPETTE_ERRORS = (
+    PipetteActionTimeoutError,
+    PipetteCommunicationError,
+    PipetteNotHomedError,
+    PipetteTipMissingError,
+    PipetteVolumeOutOfRangeError,
+)
 
 
 def _describe_type(t: Any) -> str:
@@ -157,7 +216,7 @@ def _export_pydantic_models() -> dict[str, Any]:
             and obj.__module__ == types_mod.__name__
         ):
             out[name] = obj.model_json_schema()
-    for obj in HEATER_MODELS:
+    for obj in (*HEATER_MODELS, *SPINCOATER_MODELS, *PIPETTE_MODELS):
         out[obj.__name__] = obj.model_json_schema()
     return out
 
@@ -206,7 +265,7 @@ def _export_errors() -> dict[str, Any]:
                 "suggested_action_zh": obj.suggested_action_zh,
                 "docstring": (obj.__doc__ or "").strip(),
             }
-    for obj in HEATER_ERRORS:
+    for obj in (*HEATER_ERRORS, *SPINCOATER_ERRORS, *PIPETTE_ERRORS):
         out[obj.__name__] = {
             "error_code": obj.error_code,
             "severity": obj.severity,
@@ -277,6 +336,18 @@ def _export_backends() -> dict[str, Any]:
         },
         "HeaterBackend": {
             "methods": {m: _export_method(HeaterBackend, m) for m in HEATER_PUBLIC_METHODS},
+        },
+        "SpincoaterBackend": {
+            "methods": {
+                m: _export_method(SpincoaterBackend, m)
+                for m in SPINCOATER_PUBLIC_METHODS
+            },
+        },
+        "PipetteBackend": {
+            "methods": {
+                m: _export_method(PipetteBackend, m)
+                for m in PIPETTE_PUBLIC_METHODS
+            },
         },
     }
 

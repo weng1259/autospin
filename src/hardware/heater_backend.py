@@ -166,13 +166,14 @@ class HeaterBackend:
                 raise
 
     def close(self) -> None:
-        """Close this backend and, when it was connected, the shared bus."""
+        """Mark this backend disconnected; never close the shared bus.
+
+        Rs485Bus 是按物理口的进程级单例，旋涂/移液同挂——任何单设备
+        close 都不许关口（2026-07-16 审查修正）。总线生命周期归组合根管。
+        """
         with self._lifecycle_lock:
             with self._state_lock:
-                was_connected = self._connected
                 self._connected = False
-            if was_connected:
-                self._bus.close()
 
     def read_pv(self) -> HeaterStatus:
         """Read one current-temperature snapshot from PV register 74."""
@@ -226,15 +227,16 @@ class HeaterBackend:
         started = time.monotonic()
         try:
             self._write_single_register(self._config.sv_register, raw_sv)
+            # SV 寄存器写成功即更新 memo：后面 Srun 写失败时设备 SV 已经变了，
+            # status() 不能还报旧值（2026-07-16 审查修正）。
+            with self._state_lock:
+                self._last_sv_c = sv_c
             if self._config.run_on_sv_write:
                 self._write_single_register(self._config.srun_register, 0)
         except L3Error:
             self._mark_disconnected()
             raise
         duration_ms = (time.monotonic() - started) * 1000.0
-
-        with self._state_lock:
-            self._last_sv_c = sv_c
         return HeaterActionResult(
             success=True,
             target_sv_c=sv_c,
@@ -280,7 +282,9 @@ class HeaterBackend:
             self._connected = False
 
     def _validate_and_encode_sv(self, sv_c: float) -> int:
-        if not math.isfinite(sv_c) or sv_c > self._config.sv_max_c:
+        # 下限暂取 0℃（本机加热台无制冷，负值必是笔误）。TODO PM 定 sv_min_c
+        # 后改为配置项（2026-07-16 审查补充）。
+        if not math.isfinite(sv_c) or sv_c > self._config.sv_max_c or sv_c < 0.0:
             raise HeaterSetpointOutOfRangeError(
                 human_message=(
                     f"加热台设定温度 {sv_c!r} ℃ 超出安全上限 "
@@ -367,6 +371,9 @@ class HeaterBackend:
                 self._config.baudrate,
                 timeout_s=self._config.timeout_s,
             ) as serial_port:
+                # 发请求前清输入缓冲：上一笔超时的迟到应答若残留在 OS 缓冲，
+                # 会被下一次 read 当成新鲜数据（同 unit id/长度/CRC 全合法）。
+                serial_port.reset_input_buffer()
                 written = serial_port.write(request)
                 if written != len(request):
                     self._raise_protocol_error(

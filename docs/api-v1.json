@@ -179,7 +179,7 @@
     "HeaterBackend": {
       "methods": {
         "close": {
-          "docstring": "Close this backend and, when it was connected, the shared bus.",
+          "docstring": "Mark this backend disconnected; never close the shared bus.\n\nRs485Bus 是按物理口的进程级单例，旋涂/移液同挂——任何单设备\nclose 都不许关口（2026-07-16 审查修正）。总线生命周期归组合根管。",
           "parameters": {},
           "returns": "None"
         },
@@ -220,6 +220,107 @@
           "docstring": "Return the latest PV/SV snapshot without touching the RS485 bus.",
           "parameters": {},
           "returns": "HeaterStatus"
+        }
+      }
+    },
+    "PipetteBackend": {
+      "methods": {
+        "aspirate": {
+          "docstring": "Aspirate a validated volume after successful home.",
+          "parameters": {
+            "dry_run": {
+              "default": false,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "bool"
+            },
+            "idempotency_key": {
+              "default": null,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "Optional[str]"
+            },
+            "volume_ul": {
+              "kind": "positional_or_keyword",
+              "required": true,
+              "type": "float"
+            }
+          },
+          "returns": "PipetteActionResult"
+        },
+        "close": {
+          "docstring": "Mark this backend disconnected; never close the shared bus.\n\nRs485Bus 是按物理口的进程级单例，加热台/旋涂同挂——任何单设备\nclose 都不许关口（2026-07-16 审查修正）。总线生命周期归组合根管。",
+          "parameters": {},
+          "returns": "None"
+        },
+        "connect": {
+          "docstring": "Connect idempotently and read one complete snapshot to verify online.",
+          "parameters": {},
+          "returns": "None"
+        },
+        "dispense": {
+          "docstring": "Dispense a validated volume after successful home.",
+          "parameters": {
+            "dry_run": {
+              "default": false,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "bool"
+            },
+            "idempotency_key": {
+              "default": null,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "Optional[str]"
+            },
+            "volume_ul": {
+              "kind": "positional_or_keyword",
+              "required": true,
+              "type": "float"
+            }
+          },
+          "returns": "PipetteActionResult"
+        },
+        "eject_tip": {
+          "docstring": "Eject the installed tip and wait for both tip-absent and idle state.",
+          "parameters": {
+            "dry_run": {
+              "default": false,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "bool"
+            },
+            "idempotency_key": {
+              "default": null,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "Optional[str]"
+            }
+          },
+          "returns": "PipetteActionResult"
+        },
+        "home": {
+          "docstring": "Apply reviewed motion defaults, home, and IMM_STOP on bounded timeout.",
+          "parameters": {
+            "dry_run": {
+              "default": false,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "bool"
+            },
+            "idempotency_key": {
+              "default": null,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "Optional[str]"
+            }
+          },
+          "returns": "PipetteActionResult"
+        },
+        "status": {
+          "docstring": "Return the latest status snapshot without touching the RS485 bus.",
+          "parameters": {},
+          "returns": "PipetteStatus"
         }
       }
     },
@@ -288,6 +389,77 @@
           "docstring": "",
           "parameters": {},
           "returns": "bool"
+        }
+      }
+    },
+    "SpincoaterBackend": {
+      "methods": {
+        "close": {
+          "docstring": "Mark this backend disconnected; never close the shared bus.\n\nRs485Bus 是按物理口的进程级单例，加热台/移液枪同挂——任何单设备\nclose 都不许关口（2026-07-16 审查修正）。总线生命周期归组合根管。",
+          "parameters": {},
+          "returns": "None"
+        },
+        "connect": {
+          "docstring": "Connect idempotently and read 0x801B once to verify the DBLS400.",
+          "parameters": {},
+          "returns": "None"
+        },
+        "read_fault": {
+          "docstring": "Read and decode DBLS400 fault register 0x801B in one transaction.",
+          "parameters": {},
+          "returns": "SpinStatus"
+        },
+        "start": {
+          "docstring": "Start at validated RPM in fixed CCW; 无角度反馈，不能定向停转。",
+          "parameters": {
+            "dry_run": {
+              "default": false,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "bool"
+            },
+            "idempotency_key": {
+              "default": null,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "Optional[str]"
+            },
+            "rpm": {
+              "kind": "positional_or_keyword",
+              "required": true,
+              "type": "float"
+            }
+          },
+          "returns": "SpinActionResult"
+        },
+        "status": {
+          "docstring": "Return cached state without bus I/O; 无角度反馈，不能定向停转。",
+          "parameters": {},
+          "returns": "SpinStatus"
+        },
+        "stop": {
+          "docstring": "Stop with brake by default; 无角度反馈，不能定向停转。",
+          "parameters": {
+            "dry_run": {
+              "default": false,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "bool"
+            },
+            "idempotency_key": {
+              "default": null,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "Optional[str]"
+            },
+            "use_brake": {
+              "default": true,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "bool"
+            }
+          },
+          "returns": "SpinActionResult"
         }
       }
     }
@@ -409,6 +581,46 @@
       "suggested_action": "Wait for current operation to finish or call halt() first.",
       "suggested_action_zh": "机器正忙，请先点顶部「🛑 停」或等当前动作完成。"
     },
+    "PipetteActionTimeoutError": {
+      "docstring": "A pipette action exceeded its bounded wait and was immediately stopped.",
+      "error_code": "L3.PIPETTE_ACTION_TIMEOUT",
+      "recoverable": true,
+      "severity": "alarm",
+      "suggested_action": "Inspect the pipette mechanism and sensor state, call home(), then retry the action with a new idempotency key.",
+      "suggested_action_zh": "检查移液机构和传感器，重新归位后用新的幂等键重试。"
+    },
+    "PipetteCommunicationError": {
+      "docstring": "Pipette returned a timeout, malformed frame, CRC error, or exception.",
+      "error_code": "L3.PIPETTE_COMMUNICATION",
+      "recoverable": true,
+      "severity": "alarm",
+      "suggested_action": "Verify the pipette is powered and configured for this unit id and 115200 baud, then reconnect the shared RS485 bus and retry.",
+      "suggested_action_zh": "确认移液枪已上电、站号和 115200 波特率正确，再重连共享 RS485 总线后重试。"
+    },
+    "PipetteNotHomedError": {
+      "docstring": "Aspirate or dispense was requested before pipette home completed.",
+      "error_code": "L3.PIPETTE_NOT_HOMED",
+      "recoverable": true,
+      "severity": "warning",
+      "suggested_action": "Call pipette.home() before aspirate() or dispense().",
+      "suggested_action_zh": "先调用移液枪 home() 完成归位，再执行吸液或吐液。"
+    },
+    "PipetteTipMissingError": {
+      "docstring": "A liquid-transfer action was requested without a detected pipette tip.",
+      "error_code": "L3.PIPETTE_TIP_MISSING",
+      "recoverable": true,
+      "severity": "warning",
+      "suggested_action": "Install a compatible tip, verify tip_present, then retry.",
+      "suggested_action_zh": "安装兼容吸头并确认 tip_present 后重试。"
+    },
+    "PipetteVolumeOutOfRangeError": {
+      "docstring": "Requested volume exceeds the configured pipette safety boundary.",
+      "error_code": "L3.PIPETTE_VOLUME_OUT_OF_RANGE",
+      "recoverable": false,
+      "severity": "warning",
+      "suggested_action": "Choose a finite volume between 0 and pipette.max_volume_ul.",
+      "suggested_action_zh": "将体积改为 0 到 pipette.max_volume_ul 之间的有限数值。"
+    },
     "RelayCommunicationError": {
       "docstring": "DSTUR-T80 USB 继电器通信失败——端口不存在、被占用、write 超时、EMI 断联。\n\nPhase 3.3 起的通用继电器错误。Z 轴刹车专用的 `BrakeError` 是它的子类，\n`GantryBackend` 在 Z 刹车路径捕获本错误后包成 `BrakeError` 重新抛出。",
       "error_code": "L3.RELAY",
@@ -424,6 +636,30 @@
       "severity": "warning",
       "suggested_action": "Target outside work envelope; adjust Position fields.",
       "suggested_action_zh": "目标超出工作空间（见 sidebar「软限位」），请调整坐标输入。"
+    },
+    "SpincoaterCommunicationError": {
+      "docstring": "DBLS400 returned a timeout, malformed frame, CRC error, or exception.",
+      "error_code": "L3.SPINCOATER_COMMUNICATION",
+      "recoverable": true,
+      "severity": "alarm",
+      "suggested_action": "Verify the DBLS400 is powered and address/baudrate are correct, then reconnect the shared RS485 bus and retry.",
+      "suggested_action_zh": "确认 DBLS400 已上电、站号和波特率正确，再重连共享 RS485 总线后重试。"
+    },
+    "SpincoaterFaultError": {
+      "docstring": "DBLS400 fault register 0x801B is non-zero, with active bits decoded.",
+      "error_code": "L3.SPINCOATER_FAULT",
+      "recoverable": true,
+      "severity": "alarm",
+      "suggested_action": "Keep the spin coater stopped, inspect the decoded DBLS400 fault bits, correct the physical cause, then reconnect and call read_fault().",
+      "suggested_action_zh": "保持旋涂电机停机，按解码故障位检查堵转、供电、霍尔与接线；排除原因后重连并复查。"
+    },
+    "SpincoaterRpmOutOfRangeError": {
+      "docstring": "Requested spin speed exceeds the configured hard safety boundary.",
+      "error_code": "L3.SPINCOATER_RPM_OUT_OF_RANGE",
+      "recoverable": false,
+      "severity": "warning",
+      "suggested_action": "Choose a finite positive RPM at or below spincoater.max_rpm.",
+      "suggested_action_zh": "将目标转速改为大于 0 且不超过 spincoater.max_rpm 的有限数值。"
     }
   },
   "models": {
@@ -1138,6 +1374,169 @@
       "title": "MoveResult",
       "type": "object"
     },
+    "PipetteActionResult": {
+      "description": "Result or dry-run description returned by a pipette physical action.",
+      "properties": {
+        "action": {
+          "enum": [
+            "home",
+            "aspirate",
+            "dispense",
+            "eject_tip"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "action_description": {
+          "title": "Action Description",
+          "type": "string"
+        },
+        "dry_run": {
+          "title": "Dry Run",
+          "type": "boolean"
+        },
+        "duration_ms": {
+          "minimum": 0,
+          "title": "Duration Ms",
+          "type": "number"
+        },
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "success": {
+          "title": "Success",
+          "type": "boolean"
+        },
+        "volume_ul": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Requested volume for liquid actions, in microlitres.",
+          "title": "Volume Ul"
+        }
+      },
+      "required": [
+        "success",
+        "action",
+        "dry_run",
+        "action_description",
+        "duration_ms",
+        "event_id"
+      ],
+      "title": "PipetteActionResult",
+      "type": "object"
+    },
+    "PipetteStatus": {
+      "description": "Latest cached pipette snapshot; :meth:`status` performs no bus I/O.",
+      "properties": {
+        "connected": {
+          "title": "Connected",
+          "type": "boolean"
+        },
+        "driver_fault": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Latest input-register driver-fault flag.",
+          "title": "Driver Fault"
+        },
+        "homed": {
+          "title": "Homed",
+          "type": "boolean"
+        },
+        "last_update_ms_ago": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Age of the latest successful status snapshot.",
+          "title": "Last Update Ms Ago"
+        },
+        "position_steps": {
+          "anyOf": [
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Latest atomically read signed 32-bit plunger position.",
+          "title": "Position Steps"
+        },
+        "status_word": {
+          "anyOf": [
+            {
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Latest raw motion-state input register (0 means idle).",
+          "title": "Status Word"
+        },
+        "timestamp": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "UTC timestamp of the latest successful status snapshot.",
+          "title": "Timestamp"
+        },
+        "tip_present": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Latest input-register tip-presence flag.",
+          "title": "Tip Present"
+        }
+      },
+      "required": [
+        "connected",
+        "homed"
+      ],
+      "title": "PipetteStatus",
+      "type": "object"
+    },
     "Position": {
       "properties": {
         "x_mm": {
@@ -1413,6 +1812,177 @@
         "channels"
       ],
       "title": "RelayState",
+      "type": "object"
+    },
+    "SpinActionResult": {
+      "description": "Result or dry-run description returned by :meth:`start` or :meth:`stop`.",
+      "properties": {
+        "action": {
+          "enum": [
+            "start",
+            "stop"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "action_description": {
+          "title": "Action Description",
+          "type": "string"
+        },
+        "brake_engaged": {
+          "title": "Brake Engaged",
+          "type": "boolean"
+        },
+        "command_value": {
+          "description": "DBLS400 register command value after speed-factor conversion.",
+          "maximum": 65535,
+          "minimum": 0,
+          "title": "Command Value",
+          "type": "integer"
+        },
+        "direction": {
+          "const": "ccw",
+          "default": "ccw",
+          "title": "Direction",
+          "type": "string"
+        },
+        "dry_run": {
+          "title": "Dry Run",
+          "type": "boolean"
+        },
+        "duration_ms": {
+          "minimum": 0,
+          "title": "Duration Ms",
+          "type": "number"
+        },
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "success": {
+          "title": "Success",
+          "type": "boolean"
+        },
+        "target_rpm": {
+          "title": "Target Rpm",
+          "type": "number"
+        }
+      },
+      "required": [
+        "success",
+        "action",
+        "target_rpm",
+        "command_value",
+        "brake_engaged",
+        "dry_run",
+        "action_description",
+        "duration_ms",
+        "event_id"
+      ],
+      "title": "SpinActionResult",
+      "type": "object"
+    },
+    "SpinStatus": {
+      "description": "Latest in-memory spin/fault snapshot; :meth:`status` performs no I/O.",
+      "properties": {
+        "brake_engaged": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Last successfully commanded brake state; unknown before stop/start.",
+          "title": "Brake Engaged"
+        },
+        "connected": {
+          "title": "Connected",
+          "type": "boolean"
+        },
+        "direction": {
+          "const": "ccw",
+          "default": "ccw",
+          "description": "Fixed v1 direction, validated as smooth CCW from above.",
+          "title": "Direction",
+          "type": "string"
+        },
+        "fault_bits": {
+          "description": "Decoded active bits from the latest 0x801B read.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Fault Bits",
+          "type": "array"
+        },
+        "fault_register": {
+          "anyOf": [
+            {
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Latest raw DBLS400 0x801B value.",
+          "title": "Fault Register"
+        },
+        "last_update_ms_ago": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Age of the latest successful 0x801B register read.",
+          "title": "Last Update Ms Ago"
+        },
+        "running": {
+          "title": "Running",
+          "type": "boolean"
+        },
+        "target_rpm": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Last successfully commanded actual speed in RPM.",
+          "title": "Target Rpm"
+        },
+        "timestamp": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "UTC timestamp of the latest successful 0x801B register read.",
+          "title": "Timestamp"
+        }
+      },
+      "required": [
+        "connected",
+        "running"
+      ],
+      "title": "SpinStatus",
       "type": "object"
     }
   },
