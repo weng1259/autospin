@@ -29,12 +29,14 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
 button:focus-visible,
-input:focus-visible {
+input:focus-visible,
+select:focus-visible {
   outline: 2px solid var(--blue);
   outline-offset: 1px;
 }
@@ -280,15 +282,16 @@ input:focus-visible {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+  align-items: start;
 }
 
 .device-card {
   min-height: 76px;
 }
 
-.device-card header {
+.device-card-header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
   padding-bottom: 6px;
@@ -296,9 +299,330 @@ input:focus-visible {
   border-bottom: 1px solid var(--border);
 }
 
+.device-identity,
+.lifecycle-controls,
+.control-row,
+.field-control,
+.checkbox-control,
+.relay-actions {
+  display: flex;
+  align-items: center;
+}
+
+.device-identity {
+  min-width: 0;
+  gap: 5px;
+}
+
+.device-state-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  background: var(--muted);
+  border: 1px solid var(--muted);
+  border-radius: 2px;
+}
+
+.device-state-dot.is-online {
+  background: var(--green);
+  border-color: var(--green);
+}
+
+.device-state-dot.is-danger {
+  background: var(--red);
+  border-color: var(--red);
+}
+
 .panel-state {
   color: var(--muted);
   font-size: 11px;
+  white-space: nowrap;
+}
+
+.panel-state.is-danger {
+  color: var(--red);
+}
+
+.lifecycle-controls,
+.control-row,
+.relay-actions {
+  gap: 4px;
+}
+
+.lifecycle-controls {
+  flex: 0 0 auto;
+}
+
+.device-card button,
+.device-card input,
+.device-card select {
+  min-width: 0;
+  color: var(--text);
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.device-card button {
+  padding: 4px 7px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.device-card input,
+.device-card select {
+  padding: 4px 5px;
+}
+
+.device-card input[type="number"] {
+  width: 72px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.device-card select {
+  width: 76px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.device-card input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+  accent-color: var(--blue);
+}
+
+.device-card button:hover:not(:disabled) {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.device-card button:disabled,
+.device-card input:disabled,
+.device-card select:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.device-card .primary-button,
+.device-card .recovery-button.is-active {
+  color: var(--white);
+  background: var(--blue);
+  border-color: var(--blue);
+}
+
+.device-card .primary-button:hover:not(:disabled),
+.device-card .recovery-button.is-active:hover:not(:disabled) {
+  color: var(--white);
+  text-decoration: underline;
+}
+
+.device-card .danger-outline-button {
+  color: var(--red);
+  border-color: var(--red);
+}
+
+.device-card .danger-outline-button:hover:not(:disabled) {
+  color: var(--white);
+  background: var(--red);
+  border-color: var(--red);
+}
+
+.panel-transport,
+.device-note,
+.control-note {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.reading-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 8px;
+  padding: 0;
+  margin: 0 0 6px;
+}
+
+.reading-grid-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.reading-row {
+  display: grid;
+  grid-template-columns: minmax(64px, 1fr) minmax(0, auto);
+  gap: 6px;
+  align-items: baseline;
+  min-width: 0;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.reading-row dt {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reading-row dd {
+  min-width: 0;
+  margin: 0;
+  text-align: right;
+}
+
+.reading-value {
+  display: block;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.reading-value.is-danger,
+.relay-state.is-danger {
+  color: var(--red);
+  font-weight: 700;
+}
+
+.reading-value.is-online,
+.relay-state.is-online {
+  color: var(--green);
+  font-weight: 600;
+}
+
+.device-note {
+  margin: -2px 0 5px;
+}
+
+.control-stack {
+  display: grid;
+  gap: 4px;
+  padding-top: 5px;
+  border-top: 1px solid var(--border);
+}
+
+.control-row {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.control-row form,
+form.control-row {
+  margin: 0;
+}
+
+.field-control,
+.checkbox-control {
+  gap: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.checkbox-control {
+  color: var(--text);
+}
+
+.jog-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.coordinate-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  gap: 4px;
+  align-items: center;
+  margin: 0;
+}
+
+.coordinate-form .field-control {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-width: 0;
+}
+
+.coordinate-form input {
+  width: 100%;
+}
+
+.relay-grid {
+  display: grid;
+  gap: 3px;
+}
+
+.relay-row {
+  display: grid;
+  grid-template-columns: 30px minmax(80px, 1fr) 28px auto;
+  gap: 4px;
+  align-items: center;
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--border);
+}
+
+.relay-channel {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+}
+
+.relay-row label,
+.relay-row input {
+  width: 100%;
+}
+
+.relay-state {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.relay-actions button {
+  padding-right: 5px;
+  padding-left: 5px;
+}
+
+.panel-feedback {
+  display: grid;
+  gap: 2px;
+  min-height: 20px;
+  padding-top: 5px;
+  margin-top: 5px;
+  border-top: 1px solid var(--border);
+}
+
+.panel-operation {
+  color: var(--blue);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.device-card p.panel-message {
+  min-height: 16px;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+}
+
+.device-card p.panel-message.is-danger {
+  color: var(--red);
+}
+
+.device-card p.panel-message.is-success {
+  color: var(--green);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .event-heading {
@@ -392,6 +716,18 @@ input:focus-visible {
 
   .section-heading p {
     display: none;
+  }
+
+  .jog-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .coordinate-form {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .coordinate-form button {
+    grid-column: 1 / -1;
   }
 
   .event-row {

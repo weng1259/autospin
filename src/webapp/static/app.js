@@ -1,6 +1,39 @@
 const TOKEN_STORAGE_KEY = "spincoater.web.token";
+const RELAY_NOTE_STORAGE_PREFIX = "spincoater.web.relay-note.";
 const RECONNECT_MAX_MS = 8000;
 const EVENT_LIMIT = 100;
+const REQUESTING_OPERATION = "requesting";
+
+const DEVICE_LABELS = {
+  gantry: "龙门架",
+  heater: "加热台",
+  spincoater: "旋涂",
+  pipette: "移液",
+  linear_stage: "滑台",
+  relay: "继电器",
+  gripper: "夹爪",
+};
+
+const ACTION_LABELS = {
+  connect: "连接",
+  disconnect: "断开",
+  home: "归零",
+  move: "移动",
+  jog: "点动",
+  recover: "Alarm 恢复",
+  "set-sv": "设定 SV",
+  pv: "读取 PV",
+  start: "启动",
+  stop: "停止",
+  fault: "读取故障",
+  aspirate: "吸液",
+  dispense: "排液",
+  "eject-tip": "退 Tip",
+  "ch-on": "通道 ON",
+  "ch-off": "通道 OFF",
+  open: "张开",
+  close: "夹紧",
+};
 
 const elements = {
   serviceDot: document.querySelector("#service-dot"),
@@ -17,14 +50,23 @@ const elements = {
   estopReport: document.querySelector("#estop-report"),
   eventCount: document.querySelector("#event-count"),
   eventLog: document.querySelector("#event-log"),
+  devicePanels: new Map(
+    [...document.querySelectorAll("[data-device]")].map((panel) => [
+      panel.dataset.device,
+      panel,
+    ]),
+  ),
 };
 
 const state = {
   events: [],
   currentOperation: null,
+  operationConflict: null,
   operationRequestInFlight: false,
   startedOperationIds: new Set(),
   completedOperationIds: new Set(),
+  panelPending: new Map(),
+  gantryMachineState: null,
   streamController: null,
   streamRevision: 0,
   reconnectDelayMs: 1000,
@@ -89,10 +131,27 @@ async function responsePayload(response) {
   }
 }
 
+function structuredErrorMessage(detail, fallback = "") {
+  if (!detail || typeof detail !== "object") {
+    return fallback;
+  }
+  const human = typeof detail.human_message === "string"
+    ? detail.human_message.trim()
+    : "";
+  const action = typeof detail.suggested_action_zh === "string"
+    ? detail.suggested_action_zh.trim()
+    : "";
+  if (human && action) {
+    return `${human} 建议：${action}`;
+  }
+  return human || action || fallback;
+}
+
 function errorMessage(payload, fallback) {
   const detail = payload && typeof payload === "object" ? payload.error : null;
-  if (detail && typeof detail.human_message === "string") {
-    return detail.human_message;
+  const structured = structuredErrorMessage(detail);
+  if (structured) {
+    return structured;
   }
   if (payload && typeof payload.detail === "string") {
     return payload.detail;
@@ -220,8 +279,366 @@ function logEvent(kind, message, { danger = false } = {}) {
   renderEventLog();
 }
 
+function panelForDevice(device) {
+  return elements.devicePanels.get(device) || null;
+}
+
+function setPanelMessage(device, text, { danger = false, success = false } = {}) {
+  const panel = panelForDevice(device);
+  const message = panel ? panel.querySelector('[data-role="message"]') : null;
+  if (!message) {
+    return;
+  }
+  message.textContent = text;
+  message.classList.toggle("is-danger", danger);
+  message.classList.toggle("is-success", success && !danger);
+}
+
+function setReadout(name, text, { danger = false, online = false } = {}) {
+  const output = document.querySelector(`[data-readout="${name}"]`);
+  if (!output) {
+    return;
+  }
+  output.textContent = text;
+  output.classList.toggle("is-danger", danger);
+  output.classList.toggle("is-online", online && !danger);
+}
+
+function snapshotRecord(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+
+function formatNumber(value, digits, unit) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return `— ${unit}`;
+  }
+  return `${value.toFixed(digits)} ${unit}`;
+}
+
+function formatBoolean(value, trueText, falseText) {
+  if (value === true) {
+    return trueText;
+  }
+  if (value === false) {
+    return falseText;
+  }
+  return "—";
+}
+
+function setDeviceConnection(device, snapshot, connectedField = null) {
+  const panel = panelForDevice(device);
+  if (!panel) {
+    return;
+  }
+  const dot = panel.querySelector('[data-role="connection-dot"]');
+  const copy = panel.querySelector('[data-role="connection-text"]');
+  if (!dot || !copy) {
+    return;
+  }
+
+  let mode = "neutral";
+  let text = "—";
+  if (snapshot && typeof snapshot.error === "string") {
+    mode = "danger";
+    text = "异常";
+    dot.title = snapshot.error;
+  } else if (connectedField && snapshot && snapshot[connectedField] === true) {
+    mode = "online";
+    text = "已连接";
+    dot.removeAttribute("title");
+  } else if (connectedField && snapshot && snapshot[connectedField] === false) {
+    text = "未连接";
+    dot.removeAttribute("title");
+  } else {
+    dot.removeAttribute("title");
+  }
+
+  dot.classList.toggle("is-online", mode === "online");
+  dot.classList.toggle("is-danger", mode === "danger");
+  copy.classList.toggle("is-danger", mode === "danger");
+  copy.textContent = text;
+}
+
+function renderGantrySnapshot(snapshot) {
+  setDeviceConnection("gantry", snapshot);
+  const position = snapshotRecord(snapshot && snapshot.position);
+  const machineState = snapshot && typeof snapshot.state === "string"
+    ? snapshot.state
+    : null;
+  const limits = snapshot && Array.isArray(snapshot.limit_pins)
+    ? snapshot.limit_pins
+    : null;
+
+  setReadout("gantry-x", formatNumber(position && position.x_mm, 2, "mm"));
+  setReadout("gantry-y", formatNumber(position && position.y_mm, 2, "mm"));
+  setReadout("gantry-z", formatNumber(position && position.z_mm, 2, "mm"));
+  setReadout("gantry-state", machineState || "—", {
+    danger: machineState === "alarm",
+  });
+  setReadout(
+    "gantry-homed",
+    formatBoolean(snapshot && snapshot.is_homed, "是", "否"),
+  );
+  setReadout(
+    "gantry-limits",
+    limits === null ? "—" : limits.length === 0 ? "无" : limits.join(" "),
+    { danger: Boolean(limits && limits.length) },
+  );
+
+  state.gantryMachineState = machineState;
+  updatePanelControls("gantry");
+}
+
+function renderHeaterSnapshot(snapshot) {
+  setDeviceConnection("heater", snapshot, "connected");
+  setReadout("heater-pv", formatNumber(snapshot && snapshot.pv_c, 1, "℃"));
+  setReadout("heater-sv", formatNumber(snapshot && snapshot.sv_c, 1, "℃"));
+}
+
+function renderSpincoaterSnapshot(snapshot) {
+  setDeviceConnection("spincoater", snapshot, "connected");
+  const faultBits = snapshot && Array.isArray(snapshot.fault_bits)
+    ? snapshot.fault_bits
+    : null;
+  setReadout(
+    "spincoater-rpm",
+    formatNumber(snapshot && snapshot.target_rpm, 0, "RPM"),
+  );
+  setReadout(
+    "spincoater-running",
+    formatBoolean(snapshot && snapshot.running, "运行", "停止"),
+    { online: snapshot && snapshot.running === true },
+  );
+  setReadout(
+    "spincoater-faults",
+    faultBits === null ? "—" : faultBits.length === 0 ? "无" : faultBits.join("、"),
+    { danger: Boolean(faultBits && faultBits.length) },
+  );
+}
+
+function renderPipetteSnapshot(snapshot) {
+  setDeviceConnection("pipette", snapshot, "connected");
+  setReadout(
+    "pipette-position",
+    formatNumber(snapshot && snapshot.position_steps, 0, "step"),
+  );
+  setReadout(
+    "pipette-homed",
+    formatBoolean(snapshot && snapshot.homed, "是", "否"),
+  );
+  setReadout(
+    "pipette-tip",
+    formatBoolean(snapshot && snapshot.tip_present, "有", "无"),
+  );
+}
+
+function formatStageFlags(snapshot) {
+  const raw = snapshot && snapshot.flags_raw;
+  if (!Number.isInteger(raw)) {
+    return "—";
+  }
+  const binary = (value) => value === true ? "1" : value === false ? "0" : "—";
+  const hex = raw.toString(16).toUpperCase().padStart(2, "0");
+  return `0x${hex} · 使能${binary(snapshot.enabled)} 到位${binary(snapshot.in_position)} 堵转${binary(snapshot.stalled)} 保护${binary(snapshot.stall_protection_active)}`;
+}
+
+function renderLinearStageSnapshot(snapshot) {
+  setDeviceConnection("linear_stage", snapshot, "connected");
+  setReadout(
+    "linear-stage-position",
+    formatNumber(snapshot && snapshot.position_mm, 2, "mm"),
+  );
+  setReadout(
+    "linear-stage-homed",
+    formatBoolean(snapshot && snapshot.homed, "是", "否"),
+  );
+  setReadout("linear-stage-flags", formatStageFlags(snapshot), {
+    danger: Boolean(
+      snapshot
+      && (snapshot.stalled === true || snapshot.stall_protection_active === true),
+    ),
+  });
+}
+
+function renderRelaySnapshot(snapshot) {
+  setDeviceConnection("relay", snapshot);
+  const channels = snapshotRecord(snapshot && snapshot.channels);
+  for (let channel = 3; channel <= 8; channel += 1) {
+    const value = channels ? channels[String(channel)] : undefined;
+    setReadout(
+      `relay-${channel}`,
+      value === true ? "ON" : value === false ? "OFF" : "—",
+      { online: value === true },
+    );
+  }
+}
+
+function renderGripperSnapshot(snapshot) {
+  setDeviceConnection("gripper", snapshot);
+  const commanded = snapshot && typeof snapshot.commanded_state === "string"
+    ? snapshot.commanded_state
+    : null;
+  const labels = { open: "张开", closed: "夹紧", unknown: "未知" };
+  setReadout("gripper-state", commanded && labels[commanded] ? labels[commanded] : "—");
+}
+
+function renderDeviceSnapshots(devices) {
+  const values = snapshotRecord(devices) || {};
+  renderGantrySnapshot(snapshotRecord(values.gantry));
+  renderHeaterSnapshot(snapshotRecord(values.heater));
+  renderSpincoaterSnapshot(snapshotRecord(values.spincoater));
+  renderPipetteSnapshot(snapshotRecord(values.pipette));
+  renderLinearStageSnapshot(snapshotRecord(values.linear_stage));
+  renderRelaySnapshot(snapshotRecord(values.relay));
+  renderGripperSnapshot(snapshotRecord(values.gripper));
+}
+
+function updatePanelControls(device) {
+  const panel = panelForDevice(device);
+  if (!panel) {
+    return;
+  }
+  const pending = state.panelPending.has(device);
+  for (const control of panel.querySelectorAll("button, input, select")) {
+    if (control.dataset.alwaysEnabled === "true") {
+      control.disabled = false;
+      continue;
+    }
+    const requiresAlarm = control.dataset.requiresAlarm === "true";
+    const alarmReady = state.gantryMachineState === "alarm";
+    control.disabled = pending || (requiresAlarm && !alarmReady);
+    if (requiresAlarm) {
+      control.classList.toggle("is-active", alarmReady && !pending);
+    }
+  }
+}
+
+function setPanelPending(device, operationId) {
+  const panel = panelForDevice(device);
+  if (!panel) {
+    return;
+  }
+  state.panelPending.set(device, operationId);
+  panel.dataset.pending = "true";
+  const output = panel.querySelector('[data-role="operation-id"]');
+  if (output) {
+    output.hidden = false;
+    output.textContent = operationId === REQUESTING_OPERATION
+      ? "operation 等待接纳"
+      : `operation ${operationId}`;
+  }
+  updatePanelControls(device);
+}
+
+function clearPanelPending(device) {
+  const panel = panelForDevice(device);
+  state.panelPending.delete(device);
+  if (!panel) {
+    return;
+  }
+  delete panel.dataset.pending;
+  const output = panel.querySelector('[data-role="operation-id"]');
+  if (output) {
+    output.hidden = true;
+    output.textContent = "";
+  }
+  updatePanelControls(device);
+}
+
+function completePanelOperation(operation) {
+  if (!operation || typeof operation !== "object") {
+    return;
+  }
+  const pendingId = state.panelPending.get(operation.device);
+  if (pendingId !== operation.id) {
+    return;
+  }
+  clearPanelPending(operation.device);
+  const elapsed = Number(operation.elapsed) || 0;
+  if (operation.status === "failed") {
+    setPanelMessage(
+      operation.device,
+      structuredErrorMessage(operation.error, `${operationName(operation)} 失败`),
+      { danger: true },
+    );
+    return;
+  }
+  setPanelMessage(
+    operation.device,
+    `${operationName(operation)} 已完成 · ${elapsed.toFixed(1)} s`,
+    { success: true },
+  );
+}
+
+function showOperationConflict(error) {
+  const payload = error && error.payload;
+  const operation = snapshotRecord(payload && payload.current_operation);
+  if (!operation) {
+    return;
+  }
+  state.operationConflict = operation;
+  state.currentOperation = operation;
+  renderCurrentOperation();
+}
+
+function handlePanelError(device, label, error) {
+  if (error && error.status === 409) {
+    showOperationConflict(error);
+  }
+  const message = error && error.message ? error.message : `${label}请求失败`;
+  setPanelMessage(device, message, { danger: true });
+  logEvent(`${DEVICE_LABELS[device] || device} 请求失败`, message, { danger: true });
+}
+
+async function runPanelOperation(device, label, path, body) {
+  if (state.panelPending.has(device)) {
+    return;
+  }
+  setPanelPending(device, REQUESTING_OPERATION);
+  setPanelMessage(device, `${label}请求发送中`);
+  try {
+    const accepted = await api(path, body);
+    if (
+      !accepted
+      || accepted.accepted !== true
+      || typeof accepted.operation_id !== "string"
+    ) {
+      throw new Error("服务未返回 operation id。建议：检查服务端响应后再重试。");
+    }
+    state.operationConflict = null;
+    setPanelPending(device, accepted.operation_id);
+    setPanelMessage(device, `${label}已接纳，等待 SSE 完成事件`);
+    logEvent("operation 接纳", `${DEVICE_LABELS[device] || device} · ${label} · ${accepted.operation_id}`);
+    void refreshCurrentOperation();
+  } catch (error) {
+    clearPanelPending(device);
+    handlePanelError(device, label, error);
+  }
+}
+
+async function runImmediatePanelAction(device, label, path, body) {
+  setPanelMessage(device, `${label}请求已直达`);
+  try {
+    await api(path, body);
+    const pendingSuffix = state.panelPending.has(device)
+      ? "；原 operation 等待 SSE 收尾"
+      : "";
+    setPanelMessage(device, `${label}命令已完成${pendingSuffix}`, { success: true });
+    logEvent("立即停止", `${DEVICE_LABELS[device] || device} · ${label}`);
+  } catch (error) {
+    handlePanelError(device, label, error);
+  }
+}
+
+function formNumber(form, name) {
+  const input = form.elements.namedItem(name);
+  return input instanceof HTMLInputElement ? input.valueAsNumber : Number.NaN;
+}
+
 function operationName(operation) {
-  return `${operation.device} · ${operation.action}`;
+  const device = DEVICE_LABELS[operation.device] || operation.device;
+  const action = ACTION_LABELS[operation.action] || operation.action;
+  return `${device} · ${action}`;
 }
 
 function operationElapsedSeconds(operation) {
@@ -238,6 +655,14 @@ function renderCurrentOperation() {
   if (!operation) {
     elements.operationDeviceAction.textContent = "空闲";
     elements.operationDeviceAction.classList.add("is-idle");
+    elements.operationElapsed.hidden = true;
+    return;
+  }
+
+  if (state.operationConflict && state.operationConflict.id === operation.id) {
+    const elapsed = operationElapsedSeconds(operation).toFixed(1);
+    elements.operationDeviceAction.textContent = `被 ${operationName(operation)} 占用（已运行 ${elapsed}s）`;
+    elements.operationDeviceAction.classList.remove("is-idle");
     elements.operationElapsed.hidden = true;
     return;
   }
@@ -268,9 +693,8 @@ function recordOperationCompletion(operation) {
 
   const elapsed = Number(operation.elapsed) || 0;
   if (operation.status === "failed") {
-    const detail = operation.error && operation.error.human_message
-      ? `：${operation.error.human_message}`
-      : "";
+    const detailMessage = structuredErrorMessage(operation.error);
+    const detail = detailMessage ? `：${detailMessage}` : "";
     logEvent(
       "operation 结束",
       `${operationName(operation)} 失败 · ${elapsed.toFixed(1)} s${detail}`,
@@ -295,6 +719,9 @@ async function refreshCurrentOperation() {
     if (operation && (!state.currentOperation || state.currentOperation.id !== operation.id)) {
       recordOperationStart(operation);
     }
+    if (!operation || !state.operationConflict || state.operationConflict.id !== operation.id) {
+      state.operationConflict = null;
+    }
     state.currentOperation = operation;
     renderCurrentOperation();
   } catch {
@@ -313,7 +740,9 @@ function handleStatusSnapshot(snapshot) {
   if (Number.isFinite(seq)) {
     elements.statusSeq.textContent = `${seq} 帧`;
   }
+  renderDeviceSnapshots(snapshot.devices);
   if (snapshot.last_operation) {
+    completePanelOperation(snapshot.last_operation);
     recordOperationCompletion(snapshot.last_operation);
   }
   void refreshCurrentOperation();
@@ -563,6 +992,152 @@ async function checkServiceHealth() {
   }
 }
 
+function bindDeviceControls() {
+  for (const button of document.querySelectorAll("[data-operation-path]")) {
+    button.addEventListener("click", () => {
+      const panel = button.closest("[data-device]");
+      if (!panel) {
+        return;
+      }
+      const body = button.dataset.operationMethod === "GET" ? undefined : {};
+      void runPanelOperation(
+        panel.dataset.device,
+        button.dataset.operationLabel || button.textContent.trim(),
+        button.dataset.operationPath,
+        body,
+      );
+    });
+  }
+
+  for (const button of document.querySelectorAll("[data-jog-axis]")) {
+    button.addEventListener("click", () => {
+      const step = Number(document.querySelector("#gantry-step").value);
+      const feed = Number(document.querySelector("#gantry-feed").value);
+      const direction = Number(button.dataset.jogDirection);
+      void runPanelOperation("gantry", `点动 ${button.textContent.trim()}`, "/api/gantry/jog", {
+        axis: button.dataset.jogAxis,
+        distance: step * direction,
+        feed,
+      });
+    });
+  }
+
+  const gantryMoveForm = document.querySelector("#gantry-move-form");
+  gantryMoveForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!gantryMoveForm.reportValidity()) {
+      return;
+    }
+    void runPanelOperation("gantry", "绝对移动", "/api/gantry/move", {
+      x: formNumber(gantryMoveForm, "x"),
+      y: formNumber(gantryMoveForm, "y"),
+      z: formNumber(gantryMoveForm, "z"),
+      feed: Number(document.querySelector("#gantry-feed").value),
+    });
+  });
+
+  const heaterForm = document.querySelector("#heater-sv-form");
+  heaterForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!heaterForm.reportValidity()) {
+      return;
+    }
+    void runPanelOperation("heater", "设定 SV", "/api/heater/set-sv", {
+      sv_c: formNumber(heaterForm, "sv_c"),
+    });
+  });
+
+  const spincoaterForm = document.querySelector("#spincoater-start-form");
+  spincoaterForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!spincoaterForm.reportValidity()) {
+      return;
+    }
+    void runPanelOperation("spincoater", "启动", "/api/spincoater/start", {
+      rpm: formNumber(spincoaterForm, "rpm"),
+    });
+  });
+
+  document.querySelector("#spincoater-stop-button").addEventListener("click", () => {
+    void runPanelOperation("spincoater", "停止", "/api/spincoater/stop", {
+      use_brake: document.querySelector("#spincoater-brake").checked,
+    });
+  });
+
+  const pipetteForm = document.querySelector("#pipette-volume-form");
+  pipetteForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!pipetteForm.reportValidity()) {
+      return;
+    }
+    const action = event.submitter && event.submitter.dataset.volumeAction
+      ? event.submitter.dataset.volumeAction
+      : "aspirate";
+    const labels = { aspirate: "吸液", dispense: "排液" };
+    void runPanelOperation(
+      "pipette",
+      labels[action] || action,
+      `/api/pipette/${action}`,
+      { volume_ul: formNumber(pipetteForm, "volume_ul") },
+    );
+  });
+
+  const linearStageForm = document.querySelector("#linear-stage-move-form");
+  linearStageForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!linearStageForm.reportValidity()) {
+      return;
+    }
+    void runPanelOperation("linear_stage", "绝对移动", "/api/linearstage/move", {
+      position_mm: formNumber(linearStageForm, "position_mm"),
+    });
+  });
+
+  document.querySelector("#linear-stage-stop-button").addEventListener("click", () => {
+    void runImmediatePanelAction(
+      "linear_stage",
+      "立即停止",
+      "/api/linearstage/stop",
+      {},
+    );
+  });
+
+  for (const button of document.querySelectorAll("[data-relay-channel]")) {
+    button.addEventListener("click", () => {
+      const channel = Number(button.dataset.relayChannel);
+      const on = button.dataset.relayOn === "true";
+      void runPanelOperation(
+        "relay",
+        `CH${channel} ${on ? "ON" : "OFF"}`,
+        "/api/relay/ch",
+        { channel, on },
+      );
+    });
+  }
+}
+
+function bindRelayNotes() {
+  for (const input of document.querySelectorAll("[data-relay-note]")) {
+    const key = `${RELAY_NOTE_STORAGE_PREFIX}${input.dataset.relayNote}`;
+    try {
+      input.value = window.localStorage.getItem(key) || "";
+    } catch {
+      setPanelMessage("relay", "用途备注未读取。建议：检查浏览器本地存储权限。", {
+        danger: true,
+      });
+    }
+    input.addEventListener("input", () => {
+      try {
+        window.localStorage.setItem(key, input.value);
+      } catch {
+        setPanelMessage("relay", "用途备注未保存。建议：检查浏览器本地存储权限。", {
+          danger: true,
+        });
+      }
+    });
+  }
+}
+
 elements.tokenInput.value = loadStoredToken();
 elements.tokenInput.addEventListener("input", () => {
   persistToken(elements.tokenInput.value);
@@ -577,6 +1152,12 @@ elements.tokenInput.addEventListener("input", () => {
 elements.estopButton.addEventListener("click", () => {
   void sendEstop();
 });
+
+bindDeviceControls();
+bindRelayNotes();
+for (const device of elements.devicePanels.keys()) {
+  updatePanelControls(device);
+}
 
 window.setInterval(renderCurrentOperation, 250);
 window.addEventListener("beforeunload", () => {

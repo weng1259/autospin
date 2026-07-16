@@ -43,6 +43,39 @@ def test_static_frontend_is_public_but_api_and_non_get_requests_are_not() -> Non
     assert post_static.status_code == 401
 
 
+def test_index_contains_all_seven_device_panels_and_safety_controls() -> None:
+    index = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+
+    devices = re.findall(
+        r'<article\b[^>]*\bdata-device="([^"]+)"[^>]*>',
+        index,
+    )
+    assert devices == [
+        "gantry",
+        "heater",
+        "spincoater",
+        "pipette",
+        "linear_stage",
+        "relay",
+        "gripper",
+    ]
+    assert len(devices) == len(set(devices))
+    assert index.count('data-role="operation-id"') == 7
+    assert index.count('data-role="message"') == 7
+    assert "面板于 W3.5 接入" not in index
+
+    estop_tag = re.search(r'<button\b[^>]*id="estop-button"[^>]*>', index)
+    stage_stop_tag = re.search(
+        r'<button\b[^>]*id="linear-stage-stop-button"[^>]*>',
+        index,
+    )
+    assert estop_tag is not None
+    assert stage_stop_tag is not None
+    assert "disabled" not in estop_tag.group(0)
+    assert "disabled" not in stage_stop_tag.group(0)
+    assert 'data-always-enabled="true"' in stage_stop_tag.group(0)
+
+
 def test_css_enforces_design_prohibitions_and_palette() -> None:
     css = (STATIC_DIR / "style.css").read_text(encoding="utf-8")
     normalized = css.lower()
