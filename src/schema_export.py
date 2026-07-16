@@ -43,6 +43,17 @@ from .hardware.heater_backend import (
     HeaterSetpointOutOfRangeError,
     HeaterStatus,
 )
+from .hardware.linearstage_backend import (
+    LinearStageActionResult,
+    LinearStageActionTimeoutError,
+    LinearStageBackend,
+    LinearStageCommunicationError,
+    LinearStageFaultError,
+    LinearStageHomingError,
+    LinearStageNotHomedError,
+    LinearStagePositionOutOfRangeError,
+    LinearStageStatus,
+)
 from .hardware.pipette_backend import (
     PipetteActionResult,
     PipetteActionTimeoutError,
@@ -120,6 +131,17 @@ HEATER_PUBLIC_METHODS = [
 ]
 
 
+# LinearStageBackend 公共方法白名单。ZDT Emm 丝杆滑台（共享 RS485 总线）。
+LINEAR_STAGE_PUBLIC_METHODS = [
+    "connect",
+    "close",
+    "home",
+    "move_to",
+    "stop",
+    "status",
+]
+
+
 # SpincoaterBackend 公共方法白名单。DBLS400（共享 RS485 总线）。
 SPINCOATER_PUBLIC_METHODS = [
     "connect",
@@ -147,6 +169,17 @@ PIPETTE_PUBLIC_METHODS = [
 # 专属合同类型定义在 heater_backend.py，并在此显式注册。
 HEATER_MODELS = (HeaterActionResult, HeaterStatus)
 HEATER_ERRORS = (HeaterCommunicationError, HeaterSetpointOutOfRangeError)
+
+# W1.4 同样只允许注册性修改，LinearStage 专属合同类型留在 backend 文件。
+LINEAR_STAGE_MODELS = (LinearStageActionResult, LinearStageStatus)
+LINEAR_STAGE_ERRORS = (
+    LinearStageActionTimeoutError,
+    LinearStageCommunicationError,
+    LinearStageFaultError,
+    LinearStageHomingError,
+    LinearStageNotHomedError,
+    LinearStagePositionOutOfRangeError,
+)
 
 # W1.2 同样只允许注册性修改，Spincoater 专属合同类型留在 backend 文件。
 SPINCOATER_MODELS = (SpinActionResult, SpinStatus)
@@ -216,7 +249,12 @@ def _export_pydantic_models() -> dict[str, Any]:
             and obj.__module__ == types_mod.__name__
         ):
             out[name] = obj.model_json_schema()
-    for obj in (*HEATER_MODELS, *SPINCOATER_MODELS, *PIPETTE_MODELS):
+    for obj in (
+        *HEATER_MODELS,
+        *LINEAR_STAGE_MODELS,
+        *SPINCOATER_MODELS,
+        *PIPETTE_MODELS,
+    ):
         out[obj.__name__] = obj.model_json_schema()
     return out
 
@@ -265,7 +303,12 @@ def _export_errors() -> dict[str, Any]:
                 "suggested_action_zh": obj.suggested_action_zh,
                 "docstring": (obj.__doc__ or "").strip(),
             }
-    for obj in (*HEATER_ERRORS, *SPINCOATER_ERRORS, *PIPETTE_ERRORS):
+    for obj in (
+        *HEATER_ERRORS,
+        *LINEAR_STAGE_ERRORS,
+        *SPINCOATER_ERRORS,
+        *PIPETTE_ERRORS,
+    ):
         out[obj.__name__] = {
             "error_code": obj.error_code,
             "severity": obj.severity,
@@ -336,6 +379,12 @@ def _export_backends() -> dict[str, Any]:
         },
         "HeaterBackend": {
             "methods": {m: _export_method(HeaterBackend, m) for m in HEATER_PUBLIC_METHODS},
+        },
+        "LinearStageBackend": {
+            "methods": {
+                m: _export_method(LinearStageBackend, m)
+                for m in LINEAR_STAGE_PUBLIC_METHODS
+            },
         },
         "SpincoaterBackend": {
             "methods": {

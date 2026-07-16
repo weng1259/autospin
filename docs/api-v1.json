@@ -223,6 +223,71 @@
         }
       }
     },
+    "LinearStageBackend": {
+      "methods": {
+        "close": {
+          "docstring": "Mark this device disconnected; never close the shared RS485 bus.",
+          "parameters": {},
+          "returns": "None"
+        },
+        "connect": {
+          "docstring": "Connect idempotently and read flags plus position to verify online.",
+          "parameters": {},
+          "returns": "None"
+        },
+        "home": {
+          "docstring": "Run native collision home; any failure resets the trusted homed flag.",
+          "parameters": {
+            "dry_run": {
+              "default": false,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "bool"
+            },
+            "idempotency_key": {
+              "default": null,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "Optional[str]"
+            }
+          },
+          "returns": "LinearStageActionResult"
+        },
+        "move_to": {
+          "docstring": "Move absolutely and wait for position tolerance with live fault checks.",
+          "parameters": {
+            "dry_run": {
+              "default": false,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "bool"
+            },
+            "idempotency_key": {
+              "default": null,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "Optional[str]"
+            },
+            "position_mm": {
+              "kind": "positional_or_keyword",
+              "required": true,
+              "type": "float"
+            }
+          },
+          "returns": "LinearStageActionResult"
+        },
+        "status": {
+          "docstring": "Return the latest cached snapshot without touching the RS485 bus.",
+          "parameters": {},
+          "returns": "LinearStageStatus"
+        },
+        "stop": {
+          "docstring": "Send the immediate 0xFE stop frame; this method has no idem cache key.",
+          "parameters": {},
+          "returns": "LinearStageActionResult"
+        }
+      }
+    },
     "PipetteBackend": {
       "methods": {
         "aspirate": {
@@ -564,6 +629,54 @@
       "severity": "alarm",
       "suggested_action": "",
       "suggested_action_zh": ""
+    },
+    "LinearStageActionTimeoutError": {
+      "docstring": "Home or move exceeded its bounded wait and was immediately stopped.",
+      "error_code": "L3.LINEAR_STAGE_ACTION_TIMEOUT",
+      "recoverable": true,
+      "severity": "alarm",
+      "suggested_action": "Inspect stage power and mechanics, home again if needed, then retry with a new idempotency key.",
+      "suggested_action_zh": "检查滑台供电与机构；必要时重新归零，再用新的幂等键重试。"
+    },
+    "LinearStageCommunicationError": {
+      "docstring": "Emm stage returned a timeout, malformed frame, or invalid 0x6B tail.",
+      "error_code": "L3.LINEAR_STAGE_COMMUNICATION",
+      "recoverable": true,
+      "severity": "alarm",
+      "suggested_action": "Verify the Emm stage is powered at this address and 115200 baud, then reconnect the shared RS485 bus and retry.",
+      "suggested_action_zh": "确认 Emm 滑台已上电、站号和 115200 波特率正确，再重连共享 RS485 总线后重试。"
+    },
+    "LinearStageFaultError": {
+      "docstring": "Emm motor flags report disabled power, stall, or stall protection.",
+      "error_code": "L3.LINEAR_STAGE_FAULT",
+      "recoverable": true,
+      "severity": "alarm",
+      "suggested_action": "Keep the stage stopped, inspect motor power and mechanical obstruction, then home again before retrying motion.",
+      "suggested_action_zh": "保持滑台停止，检查电机供电和机械堵转，排障后重新归零再移动。"
+    },
+    "LinearStageHomingError": {
+      "docstring": "Emm native sensorless-home status reports an explicit failure flag.",
+      "error_code": "L3.LINEAR_STAGE_HOMING_FAILED",
+      "recoverable": true,
+      "severity": "alarm",
+      "suggested_action": "Inspect the collision-homing direction, speed, current, and obstruction; then retry home with a new idempotency key.",
+      "suggested_action_zh": "检查碰撞归零方向、速度、电流和机械阻挡，再用新的幂等键重试。"
+    },
+    "LinearStageNotHomedError": {
+      "docstring": "Absolute stage motion was requested before native home succeeded.",
+      "error_code": "L3.LINEAR_STAGE_NOT_HOMED",
+      "recoverable": true,
+      "severity": "warning",
+      "suggested_action": "Call linear_stage.home() before move_to().",
+      "suggested_action_zh": "先调用滑台 home() 完成碰撞归零，再执行绝对位置移动。"
+    },
+    "LinearStagePositionOutOfRangeError": {
+      "docstring": "Requested absolute position is outside the configured travel boundary.",
+      "error_code": "L3.LINEAR_STAGE_POSITION_OUT_OF_RANGE",
+      "recoverable": false,
+      "severity": "warning",
+      "suggested_action": "Choose a finite position_mm between 0 and linear_stage.travel_mm.",
+      "suggested_action_zh": "将目标位置改为 0 到 linear_stage.travel_mm 之间的有限数值。"
     },
     "MachineNotHomedError": {
       "docstring": "机器未归零，但调用了需要 homed 的方法（move_to 等）。",
@@ -1113,6 +1226,218 @@
         "event_id"
       ],
       "title": "HomeResult",
+      "type": "object"
+    },
+    "LinearStageActionResult": {
+      "description": "Result or dry-run description returned by a stage physical action.",
+      "properties": {
+        "action": {
+          "enum": [
+            "home",
+            "move_to",
+            "stop"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "action_description": {
+          "title": "Action Description",
+          "type": "string"
+        },
+        "dry_run": {
+          "title": "Dry Run",
+          "type": "boolean"
+        },
+        "duration_ms": {
+          "minimum": 0,
+          "title": "Duration Ms",
+          "type": "number"
+        },
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "final_position_mm": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Final Position Mm"
+        },
+        "success": {
+          "title": "Success",
+          "type": "boolean"
+        },
+        "target_position_mm": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Position Mm"
+        }
+      },
+      "required": [
+        "success",
+        "action",
+        "dry_run",
+        "action_description",
+        "duration_ms",
+        "event_id"
+      ],
+      "title": "LinearStageActionResult",
+      "type": "object"
+    },
+    "LinearStageStatus": {
+      "description": "Latest cached Emm position/flag snapshot; :meth:`status` performs no I/O.",
+      "properties": {
+        "connected": {
+          "title": "Connected",
+          "type": "boolean"
+        },
+        "enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Enabled"
+        },
+        "flags_raw": {
+          "anyOf": [
+            {
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Latest raw enable/in-position/stall flags from query 0x3A.",
+          "title": "Flags Raw"
+        },
+        "home_status_raw": {
+          "anyOf": [
+            {
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Latest native sensorless-home status from query 0x3B.",
+          "title": "Home Status Raw"
+        },
+        "homed": {
+          "title": "Homed",
+          "type": "boolean"
+        },
+        "in_position": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "In Position"
+        },
+        "last_update_ms_ago": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Age of the latest successful live feedback read.",
+          "title": "Last Update Ms Ago"
+        },
+        "moving": {
+          "title": "Moving",
+          "type": "boolean"
+        },
+        "position_mm": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Latest signed position decoded from Emm query 0x36.",
+          "title": "Position Mm"
+        },
+        "stall_protection_active": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stall Protection Active"
+        },
+        "stalled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stalled"
+        },
+        "timestamp": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "UTC timestamp of the latest successful live feedback read.",
+          "title": "Timestamp"
+        }
+      },
+      "required": [
+        "connected",
+        "homed",
+        "moving"
+      ],
+      "title": "LinearStageStatus",
       "type": "object"
     },
     "MachineStatus": {

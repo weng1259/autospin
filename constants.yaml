@@ -52,3 +52,23 @@ pipette:
   speed_01rps: 50
   accel_01rpss: 1250
   decel_01rpss: 1250
+
+linear_stage:
+  baudrate: 115200
+  timeout_s: 0.5
+  travel_mm: 100.0  # TODO PM 实测确认
+  lead_mm: 2.0
+  microsteps: 16
+  motor_step_deg: 1.8
+  default_speed_rpm: 2000
+  default_acceleration: 150
+  home_direction: 1
+  home_speed_rpm: 300
+  sensorless_timeout_ms: 10000
+  collision_rpm: 300
+  collision_current_ma: 800
+  collision_time_ms: 60
+  home_timeout_s: 35.0
+  move_timeout_s: 15.0
+  position_tolerance_mm: 0.25
+  poll_interval_s: 0.1
