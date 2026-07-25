@@ -23,7 +23,7 @@ import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -222,6 +222,7 @@ class SpincoaterBackend:
         bus: Rs485Bus,
         unit_id: int,
         config: SpincoaterConfig,
+        controller_adapter: Any | None = None,
     ) -> None:
         if not 1 <= unit_id <= 247:
             raise ValueError(f"unit_id must be in [1, 247], got {unit_id}")
@@ -255,6 +256,7 @@ class SpincoaterBackend:
         self._bus = bus
         self._unit_id = unit_id
         self._config = config
+        self._controller_adapter = controller_adapter
         self._lifecycle_lock = threading.Lock()
         self._state_lock = threading.Lock()
         self._connected = False
@@ -268,6 +270,18 @@ class SpincoaterBackend:
 
     def connect(self) -> None:
         """Connect idempotently and read 0x801B once to verify the DBLS400."""
+        if self._controller_adapter is not None:
+            with self._lifecycle_lock:
+                with self._state_lock:
+                    already_connected = self._connected
+                if already_connected:
+                    return
+                self._controller_adapter.connect()
+                self._sync_from_adapter_status(self._controller_adapter.status())
+                with self._state_lock:
+                    self._connected = True
+                return
+
         with self._lifecycle_lock:
             with self._state_lock:
                 already_connected = self._connected
@@ -293,6 +307,13 @@ class SpincoaterBackend:
         Rs485Bus 是按物理口的进程级单例，加热台/移液枪同挂——任何单设备
         close 都不许关口（2026-07-16 审查修正）。总线生命周期归组合根管。
         """
+        if self._controller_adapter is not None:
+            with self._lifecycle_lock:
+                self._controller_adapter.close()
+                with self._state_lock:
+                    self._connected = False
+                return
+
         with self._lifecycle_lock:
             with self._state_lock:
                 self._connected = False
@@ -326,6 +347,16 @@ class SpincoaterBackend:
                 duration_ms=0.0,
                 event_id="",
             )
+
+        if self._controller_adapter is not None:
+            self._ensure_connected()
+            result = self._controller_adapter.start(
+                rpm,
+                idempotency_key=idempotency_key,
+                dry_run=False,
+            )
+            self._sync_from_adapter_status(self._controller_adapter.status())
+            return result
 
         self._ensure_connected()
         started = time.monotonic()
@@ -383,6 +414,16 @@ class SpincoaterBackend:
                 event_id="",
             )
 
+        if self._controller_adapter is not None:
+            self._ensure_connected()
+            result = self._controller_adapter.stop(
+                use_brake=use_brake,
+                idempotency_key=idempotency_key,
+                dry_run=False,
+            )
+            self._sync_from_adapter_status(self._controller_adapter.status())
+            return result
+
         self._ensure_connected()
         started = time.monotonic()
         try:
@@ -410,6 +451,12 @@ class SpincoaterBackend:
 
     def read_fault(self) -> SpinStatus:
         """Read and decode DBLS400 fault register 0x801B in one transaction."""
+        if self._controller_adapter is not None:
+            self._ensure_connected()
+            status = self._controller_adapter.read_fault()
+            self._sync_from_adapter_status(status)
+            return self.status()
+
         self._ensure_connected()
         try:
             raw_fault = self._read_holding_register(self._config.fault_register)
@@ -459,6 +506,18 @@ class SpincoaterBackend:
             timestamp=timestamp,
             last_update_ms_ago=age_ms,
         )
+
+    def _sync_from_adapter_status(self, status: SpinStatus) -> None:
+        with self._state_lock:
+            self._connected = status.connected
+            self._running = status.running
+            self._target_rpm = status.target_rpm
+            self._brake_engaged = status.brake_engaged
+            self._fault_register = status.fault_register
+            self._fault_bits = tuple(status.fault_bits)
+            self._fault_timestamp = status.timestamp
+            if status.timestamp is not None:
+                self._fault_monotonic = time.monotonic()
 
     def _ensure_connected(self) -> None:
         with self._state_lock:

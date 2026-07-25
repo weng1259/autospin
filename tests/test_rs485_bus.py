@@ -102,8 +102,11 @@ def test_get_bus_realpath_aliases_share_one_instance(
     target.touch()
     alias_a = tmp_path / "adapter-a"
     alias_b = tmp_path / "adapter-b"
-    alias_a.symlink_to(target)
-    alias_b.symlink_to(target)
+    try:
+        alias_a.symlink_to(target)
+        alias_b.symlink_to(target)
+    except OSError as exc:
+        pytest.skip(f"symlink creation unavailable in this environment: {exc}")
 
     bus_a = get_bus(str(alias_a))
     bus_b = get_bus(str(alias_b))
@@ -267,3 +270,40 @@ def test_transaction_applies_timeout_and_exclusive(
     with bus.transaction("heater", baudrate=9600, timeout_s=0.2) as port:
         assert port.timeout == 0.2
         assert port.write_timeout == 0.2
+
+
+def test_guard_mode_serializes_without_opening_serial(
+    fake_serial: tuple[FakeSerial, FakeSerialFactory], tmp_path: Path
+) -> None:
+    serial_port, factory = fake_serial
+    bus = Rs485Bus(str(tmp_path / "shared-port"))
+
+    with bus.guard("spincoater", baudrate=9600, timeout_s=2.0):
+        assert factory.call_count == 0
+        assert serial_port.open_count == 0
+
+    assert factory.call_count == 0
+    assert serial_port.open_count == 0
+
+
+def test_guard_exception_releases_lock(
+    fake_serial: tuple[FakeSerial, FakeSerialFactory], tmp_path: Path
+) -> None:
+    bus = Rs485Bus(str(tmp_path / "shared-port"))
+
+    with pytest.raises(RuntimeError, match="legacy failure"):
+        with bus.guard("spincoater", baudrate=9600):
+            raise RuntimeError("legacy failure")
+
+    acquired = threading.Event()
+
+    def take_next_guard() -> None:
+        with bus.guard("heater", baudrate=9600):
+            acquired.set()
+
+    thread = threading.Thread(target=take_next_guard, daemon=True)
+    thread.start()
+    thread.join(timeout=1.0)
+
+    assert acquired.is_set()
+    assert not thread.is_alive()

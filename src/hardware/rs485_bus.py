@@ -30,6 +30,26 @@ class Rs485Bus:
         self._serial: serial.Serial | None = None
         self._transaction_lock = threading.Lock()
 
+    @contextmanager
+    def guard(
+        self,
+        device: str,
+        baudrate: int,
+        *,
+        timeout_s: float = 1.0,
+    ) -> Iterator[None]:
+        """Serialize access for a legacy controller that owns its serial port.
+
+        Phase 1 keeps verified AutoSpinmotorSystem drivers intact. Some of
+        those drivers still open their own pyserial object, so this guard
+        deliberately does not open or reconfigure :attr:`port`; it only holds
+        the same process-local lock used by :meth:`transaction` and records the
+        requested serial settings for tests/diagnostics.
+        """
+        del device, baudrate, timeout_s
+        with self._transaction_lock:
+            yield
+
     def connect(self) -> None:
         """Open the adapter once and keep it open; repeated calls are no-ops."""
         with self._transaction_lock:
