@@ -21,15 +21,16 @@ from src.hardware.spincoater_backend import (
 
 
 # Frame sources required by W1.2:
-# - autospin_system/hardware/spin_motor/driver_communication.py:141-159 and
+# - AutoSpinmotorSystem/hardware/spin_motor/driver_communication.py:141-159 and
 #   164-180 define DBLS400 reads and low-byte-first register-value writes;
-# - autospin_system/hardware/spin_motor/motor_controller.py:95-119,192-226
+# - AutoSpinmotorSystem/hardware/spin_motor/motor_controller.py:95-119,192-226
 #   define the 0x0409 CCW start word and start-then-speed sequence;
 # - motor_controller.py:205-213 define 0x040C brake / 0x0408 coast stop;
 # - motor_controller.py:215-226 set_speed() writes raw RPM to 0x8005 (no
 #   conversion); speed_factor=2.5 (:228-239) only decodes 0x8018 readback.
 FAULT_READ_REQUEST = bytes.fromhex("02 03 80 1B 00 01 DD FE")
 FAULT_ZERO_RESPONSE = bytes.fromhex("02 03 02 00 00 FC 44")
+RUN_STATE_05_RESPONSE = bytes.fromhex("02 03 02 00 05 3C 47")
 FAULT_STALL_HALL_RESPONSE = bytes.fromhex("02 03 02 05 00 FF 14")
 START_CCW_REQUEST = bytes.fromhex("02 06 80 00 09 04 A7 AA")
 SPEED_100_RPM_REQUEST = bytes.fromhex("02 06 80 05 64 00 9A F8")
@@ -85,11 +86,21 @@ class FakeBus:
         yield self.serial
 
 
-def _backend(fake_bus: FakeBus, *, max_rpm: float = 3000.0) -> SpincoaterBackend:
+def _backend(
+    fake_bus: FakeBus,
+    *,
+    max_rpm: float = 3000.0,
+    acceleration_rpm_per_s: float = 500.0,
+    deceleration_rpm_per_s: float = 500.0,
+) -> SpincoaterBackend:
     return SpincoaterBackend(
         cast(Rs485Bus, fake_bus),
         unit_id=2,
-        config=SpincoaterConfig(max_rpm=max_rpm),
+        config=SpincoaterConfig(
+            max_rpm=max_rpm,
+            acceleration_rpm_per_s=acceleration_rpm_per_s,
+            deceleration_rpm_per_s=deceleration_rpm_per_s,
+        ),
     )
 
 
@@ -122,6 +133,113 @@ def test_start_frames_match_dbls400_reference_and_speed_factor() -> None:
     assert result.dry_run is False
     assert "raw RPM" in result.action_description
     assert backend.status().running is True
+
+
+def test_software_acceleration_ramps_speed_without_guessing_drive_register(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    backend = _backend(FakeBus([]), acceleration_rpm_per_s=500.0)
+    writes: list[tuple[int, int]] = []
+    monkeypatch.setattr(backend, "_write_single_register", lambda register, value: writes.append((register, value)))
+    monkeypatch.setattr("src.hardware.spincoater_backend.time.sleep", lambda _: None)
+    with backend._state_lock:
+        backend._connected = True
+
+    result = backend.start(500.0, idempotency_key="spin-ramp-500")
+
+    assert writes[0] == (0x8000, 0x0409)
+    assert writes[1:] == [
+        (0x8005, 100),
+        (0x8005, 200),
+        (0x8005, 300),
+        (0x8005, 400),
+        (0x8005, 500),
+    ]
+    assert result.target_rpm == 500.0
+
+
+def test_acceleration_setting_is_exposed_in_status() -> None:
+    backend = _backend(FakeBus([]))
+
+    result = backend.set_acceleration(350.0)
+
+    assert result.acceleration_rpm_per_s == 350.0
+    assert backend.status().acceleration_rpm_per_s == 350.0
+
+
+def test_deceleration_setting_is_exposed_in_status() -> None:
+    backend = _backend(FakeBus([]))
+
+    result = backend.set_deceleration(300.0)
+
+    assert result.deceleration_rpm_per_s == 300.0
+    assert backend.status().deceleration_rpm_per_s == 300.0
+
+
+def test_normal_stop_ramps_to_zero_before_applying_brake(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    backend = _backend(FakeBus([]), deceleration_rpm_per_s=500.0)
+    writes: list[tuple[int, int]] = []
+    monkeypatch.setattr(
+        backend,
+        "_write_single_register",
+        lambda register, value: writes.append((register, value)),
+    )
+    monkeypatch.setattr("src.hardware.spincoater_backend.time.sleep", lambda _: None)
+    with backend._state_lock:
+        backend._connected = True
+        backend._running = True
+        backend._target_rpm = 500.0
+
+    result = backend.stop(use_brake=True, idempotency_key="ramped-stop")
+
+    assert writes == [
+        (0x8005, 400),
+        (0x8005, 300),
+        (0x8005, 200),
+        (0x8005, 100),
+        (0x8005, 0),
+        (0x8000, 0x040C),
+    ]
+    assert result.brake_engaged is True
+
+
+def test_emergency_stop_bypasses_deceleration_ramp(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    backend = _backend(FakeBus([]))
+    writes: list[tuple[int, int]] = []
+    monkeypatch.setattr(
+        backend,
+        "_write_single_register",
+        lambda register, value: writes.append((register, value)),
+    )
+    with backend._state_lock:
+        backend._connected = True
+        backend._running = True
+        backend._target_rpm = 3000.0
+
+    backend.stop(use_brake=True, ramp_down=False)
+
+    assert writes == [(0x8000, 0x040C)]
+
+
+def test_immediate_stop_marks_active_speed_ramp_aborted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    backend = _backend(FakeBus([]))
+    monkeypatch.setattr(backend, "_write_single_register", lambda *_: None)
+    with backend._state_lock:
+        backend._connected = True
+        backend._running = True
+        backend._target_rpm = 1000.0
+
+    backend.stop(use_brake=True, ramp_down=False)
+
+    assert backend._ramp_abort.is_set()
+    with pytest.raises(L3Error, match="急停中断"):
+        backend._ramp_speed(1000.0, 0.0)
 
 
 def test_rpm_above_hard_limit_is_structured_error_and_sends_no_bytes() -> None:
@@ -238,6 +356,18 @@ def test_nonzero_fault_register_raises_decoded_structured_error() -> None:
         backend.connect()
     assert fake_bus.connect_count == 1
     assert fake_bus.serial.writes == writes_after_fault_read
+
+
+def test_high_byte_run_state_is_not_reported_as_fault() -> None:
+    fake_bus = FakeBus([RUN_STATE_05_RESPONSE])
+    backend = _backend(fake_bus)
+
+    backend.connect()
+
+    status = backend.status()
+    assert status.connected is True
+    assert status.fault_register == 0x0500
+    assert status.fault_bits == []
 
 
 def test_crc_error_is_l3_connection_error_and_not_swallowed() -> None:

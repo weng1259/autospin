@@ -22,6 +22,7 @@ from src.config import L3Config, MotionConfig, SoftLimits
 from src.hardware.errors import (
     ConnectionError as L3ConnectionError,
     GrblConfigMismatchError,
+    HomingTimeoutError,
     MachineNotHomedError,
     OperationConflictError,
     SoftLimitExceededError,
@@ -310,6 +311,53 @@ def test_move_to_skips_brake_when_z_unchanged(
     fake_serial_backend._lock_brake.assert_not_called()  # type: ignore[attr-defined]
 
 
+def test_move_to_refreshes_position_before_brake_skip(
+    fake_serial_backend: GantryBackend,
+) -> None:
+    """A stale cached Z must not cause an unnecessary CH2 cycle."""
+    _prep_move_to_ready(fake_serial_backend, current_z=-5.0)
+
+    def refresh(*, timeout_s: float) -> bool:
+        del timeout_s
+        fake_serial_backend._status = fake_serial_backend._status.model_copy(
+            update={
+                "position": Position(x_mm=-287.0, y_mm=-245.5, z_mm=-50.0)
+            }
+        )
+        return True
+
+    fake_serial_backend._poll_status_sync = refresh  # type: ignore[method-assign]
+    fake_serial_backend.move_to(Position(x_mm=-13.0, y_mm=-40.0, z_mm=-50.0))
+
+    fake_serial_backend._release_brake.assert_not_called()  # type: ignore[attr-defined]
+    fake_serial_backend._lock_brake.assert_not_called()  # type: ignore[attr-defined]
+
+
+def test_wait_idle_reports_idle_position_mismatch(
+    fake_serial_backend: GantryBackend,
+) -> None:
+    """An Idle controller at the wrong position is not an Idle timeout."""
+    fake_serial_backend._status = fake_serial_backend._status.model_copy(
+        update={
+            "state": MachineState.IDLE,
+            "position": Position(x_mm=-287.0, y_mm=-245.5, z_mm=-50.0),
+        }
+    )
+    fake_serial_backend._poll_status_sync = (  # type: ignore[method-assign]
+        lambda timeout_s: True
+    )
+
+    with pytest.raises(HomingTimeoutError) as exc_info:
+        fake_serial_backend._wait_idle(
+            timeout_s=0.01,
+            target=Position(x_mm=-13.0, y_mm=-40.0, z_mm=-50.0),
+        )
+
+    assert "Idle but the target was not reached" in exc_info.value.agent_message
+    assert "target=(-13.000, -40.000, -50.000)" in exc_info.value.agent_message
+    assert "actual=(-287.000, -245.500, -50.000)" in exc_info.value.agent_message
+
+
 def test_move_to_skips_brake_within_epsilon(
     fake_serial_backend: GantryBackend,
 ) -> None:
@@ -473,6 +521,31 @@ def test_parse_status_line_idle(fake_serial_backend: GantryBackend) -> None:
     assert st.position.z_mm == pytest.approx(-9.012)
     assert st.planner_buffer_free == 35
     assert st.rx_buffer_free == 255
+
+
+def test_parse_status_line_rejects_int32_overflow_position(
+    fake_serial_backend: GantryBackend,
+) -> None:
+    fake_serial_backend._is_homed = True
+    fake_serial_backend._status = fake_serial_backend._status.model_copy(
+        update={
+            "position": Position(x_mm=-150.0, y_mm=-171.0, z_mm=-65.0),
+            "is_homed": True,
+        }
+    )
+
+    fake_serial_backend._parse_status_line(
+        "<Idle|MPos:-2147483.647,-2147483.647,2147483.647|Pn:XYZ>"
+    )
+
+    status = fake_serial_backend._status
+    assert status.position == Position(x_mm=-150.0, y_mm=-171.0, z_mm=-65.0)
+    assert status.position_valid is False
+    assert status.state == MachineState.UNKNOWN
+    assert status.is_homed is False
+    assert fake_serial_backend._is_homed is False
+    assert status.limit_pins == ["X", "Y", "Z"]
+    assert "outside configured envelope" in status.status_error
 
 
 def test_parse_status_line_jog(fake_serial_backend: GantryBackend) -> None:

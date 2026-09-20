@@ -87,8 +87,8 @@ driver 硬编码 `speed_factor=2.5` **正确**（仅对 pole_pairs=4 成立，�
 - `tools/spinmotor_bringup.py`：分级 bring-up（`voltage` 只读 / `spin [RPM] [HOLD]` 真转）。
   安全门闩：真转需 `SPIN_CONFIRM=1`，RPM>300 硬拒绝，`SPIN_PORT` 可覆盖端口。
 - `tools/serial_id_probe.py`：串口身份协议探测（grbl vs DBLS400 Modbus，全只读）。
-- `autospin_system/test_spin_motor_profile.py`：已按任务卡改 mock=False + 低速 profile
-  （原冲3000的多段升速降级为 `LEGACY_RAMP_PROFILE`，平衡确认后再用）。
+- `tools/spinmotor_bringup.py`：当前 `DeviceRegistry`/spincoater backend 入口；默认仅
+  状态读取或 dry-run，真转需 `--apply` 和精确确认短语，且 RPM 上限为 300。
 
 ## 后续（smoke-gate 已全过，以下为可选/移交）
 

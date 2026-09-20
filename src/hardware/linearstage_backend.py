@@ -23,7 +23,7 @@ import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Literal, NoReturn
+from typing import Any, Literal, NoReturn
 
 from pydantic import BaseModel, Field
 
@@ -58,6 +58,7 @@ _FLAG_STALL_PROTECTION = 0x08
 # 0x3B native-home flags, reference lines 258-264.
 _HOME_ACTIVE = 0x04
 _HOME_FAILED = 0x08
+_REQUIRED_STABLE_POSITION_READS = 3
 
 
 class LinearStageCommunicationError(L3ConnectionError):
@@ -205,7 +206,7 @@ class LinearStageConfig:
     collision_time_ms: int = 60
     home_timeout_s: float = 35.0
     move_timeout_s: float = 15.0
-    position_tolerance_mm: float = 0.25
+    position_tolerance_mm: float = 0.7
     poll_interval_s: float = 0.1
 
 
@@ -267,6 +268,7 @@ class LinearStageBackend:
         bus: Rs485Bus,
         address: int,
         config: LinearStageConfig,
+        controller_adapter: Any | None = None,
     ) -> None:
         if not 1 <= address <= 0xFF:
             raise ValueError(f"address must be in [1, 255], got {address}")
@@ -314,12 +316,16 @@ class LinearStageBackend:
         self._bus = bus
         self._address = address
         self._config = config
+        self._controller_adapter = controller_adapter
         self._lifecycle_lock = threading.Lock()
         self._state_lock = threading.Lock()
         self._connected = False
         self._homed = False
         self._moving = False
         self._position_mm: float | None = None
+        # Emm 0xFD is relative-only. Keep the last accepted target as the
+        # nominal coordinate origin, matching AutoSpinmotorSystem.
+        self._commanded_position_mm: float | None = None
         self._flags_raw: int | None = None
         self._home_status_raw: int | None = None
         self._status_timestamp: datetime | None = None
@@ -332,6 +338,20 @@ class LinearStageBackend:
 
     def connect(self) -> None:
         """Connect idempotently and read flags plus position to verify online."""
+        if self._controller_adapter is not None:
+            with self._lifecycle_lock:
+                with self._state_lock:
+                    if self._connected:
+                        return
+                self._controller_adapter.connect()
+                self._sync_from_adapter_status(self._controller_adapter.status())
+                with self._state_lock:
+                    self._connected = True
+                    self._homed = False
+                    self._moving = False
+                    self._commanded_position_mm = None
+                return
+
         with self._lifecycle_lock:
             with self._state_lock:
                 if self._connected:
@@ -343,6 +363,7 @@ class LinearStageBackend:
                 # since power-up; only this backend's successful home() may set it.
                 self._homed = False
                 self._moving = False
+                self._commanded_position_mm = None
             try:
                 self._read_flags()
                 self._read_position_mm()
@@ -352,11 +373,28 @@ class LinearStageBackend:
 
     def close(self) -> None:
         """Mark this device disconnected; never close the shared RS485 bus."""
+        if self._controller_adapter is not None:
+            with self._lifecycle_lock:
+                self._controller_adapter.close()
+                with self._state_lock:
+                    self._connected = False
+                    self._homed = False
+                    self._moving = False
+                    self._commanded_position_mm = None
+                return
+
         with self._lifecycle_lock:
             with self._state_lock:
                 self._connected = False
                 self._homed = False
                 self._moving = False
+                self._commanded_position_mm = None
+
+    def disconnect(self) -> None:
+        self.close()
+
+    def shutdown(self) -> None:
+        self.close()
 
     @observable(idempotency_ttl_s=24 * 3600)
     def home(
@@ -380,6 +418,19 @@ class LinearStageBackend:
                 action_description=action_description,
                 duration_ms=0.0,
             )
+
+        if self._controller_adapter is not None:
+            self._ensure_connected()
+            result = self._controller_adapter.home(
+                idempotency_key=idempotency_key,
+                dry_run=False,
+            )
+            self._sync_from_adapter_status(self._controller_adapter.status())
+            with self._state_lock:
+                self._homed = True
+                self._moving = False
+                self._commanded_position_mm = 0.0
+            return result
 
         self._ensure_connected()
         started = time.monotonic()
@@ -411,6 +462,7 @@ class LinearStageBackend:
             with self._state_lock:
                 self._homed = False
                 self._moving = False
+                self._commanded_position_mm = None
             if isinstance(exc, L3ConnectionError):
                 self._mark_disconnected()
             raise
@@ -419,6 +471,7 @@ class LinearStageBackend:
             self._homed = True
             self._moving = False
             self._position_mm = final_position
+            self._commanded_position_mm = 0.0
             self._touch_status_locked()
         return self._action_result(
             action="home",
@@ -436,13 +489,21 @@ class LinearStageBackend:
         *,
         idempotency_key: str | None = None,
         dry_run: bool = False,
+        position_tolerance_mm: float | None = None,
     ) -> LinearStageActionResult:
         """Move absolutely and wait for position tolerance with live fault checks."""
         target = self._validate_position(position_mm)
+        tolerance = (
+            self._config.position_tolerance_mm
+            if position_tolerance_mm is None
+            else float(position_tolerance_mm)
+        )
+        if not math.isfinite(tolerance) or not 0 < tolerance <= self._config.travel_mm:
+            raise ValueError("position_tolerance_mm must be finite and within travel")
         dry_description = (
             f"Move Emm stage to absolute {target:g} mm at "
             f"{self._config.default_speed_rpm} RPM and wait within "
-            f"±{self._config.position_tolerance_mm:g} mm"
+            f"±{tolerance:g} mm"
         )
         if dry_run:
             return self._action_result(
@@ -456,54 +517,81 @@ class LinearStageBackend:
 
         self._ensure_connected()
         self._ensure_homed()
-        with self._state_lock:
-            current = self._position_mm
-        if current is None:
+        if self._controller_adapter is not None:
+            adapter_status = self._controller_adapter.status()
+            self._sync_from_adapter_status(adapter_status)
+            current = adapter_status.position_mm
+        else:
             current = self._read_position_mm()
+        if current is None:
+            raise LinearStageCommunicationError(
+                human_message="丝杆滑台移动前无法读取实时位置",
+                agent_message=(
+                    "Linear-stage move_to could not obtain a live position before "
+                    "planning the absolute move."
+                ),
+            )
 
         distance = target - current
-        if abs(distance) <= self._config.position_tolerance_mm:
+        if abs(distance) <= tolerance:
             return self._action_result(
                 action="move_to",
                 target_position_mm=target,
                 final_position_mm=current,
                 dry_run=False,
                 action_description=(
-                    f"Already within ±{self._config.position_tolerance_mm:g} mm of "
+                    f"Already within ±{tolerance:g} mm of "
                     f"absolute target {target:g} mm; no motion frame was needed"
                 ),
                 duration_ms=0.0,
             )
 
-        pulses = round(abs(distance) * self.pulses_per_mm)
-        direction = 0x00 if distance >= 0 else 0x01
-        payload = bytes([direction])
-        payload += self._config.default_speed_rpm.to_bytes(2, "big")
-        payload += bytes([self._config.default_acceleration])
-        payload += pulses.to_bytes(4, "big") + bytes([0x00, 0x00])
-        move_frame = self._frame(_MOVE_RELATIVE, payload)
+        with self._state_lock:
+            commanded_origin = self._commanded_position_mm
+        if commanded_origin is None:
+            raise LinearStageNotHomedError(
+                "move_to requires a trusted commanded origin from home"
+            )
+
         action_description = (
-            f"Move from {current:g} to {target:g} mm using direction={direction}, "
-            f"speed={self._config.default_speed_rpm} RPM, pulses={pulses}; then "
-            f"poll position and flags within ±{self._config.position_tolerance_mm:g} mm"
+            f"Move directly from commanded {commanded_origin:g} mm "
+            f"(observed {current:g} mm) to {target:g} mm in one command "
+            f"at {self._config.default_speed_rpm} RPM and wait within "
+            f"±{tolerance:g} mm"
         )
 
         started = time.monotonic()
-        deadline = started + self._config.move_timeout_s
         with self._state_lock:
             self._moving = True
         try:
-            # 参考 297-298 行：每次移动前重新使能（审查 P2-1）——电机中途失能
-            # 时在发运动帧之前暴露，而不是发一条无效指令后靠轮询超时兜底。
-            self._enable_for_motion(
-                deadline, action="move_to", timeout_s=self._config.move_timeout_s
-            )
-            # Reference lines 293-300: 0xFD uses a four-byte acknowledgement.
-            self._command(move_frame, expected_response_length=4)
-            final_position = self._wait_for_position(target, deadline)
+            if self._controller_adapter is not None:
+                move_result = self._controller_adapter.move_to(
+                    target,
+                    idempotency_key=idempotency_key,
+                    dry_run=False,
+                )
+                final_position = move_result.final_position_mm
+                if final_position is None:
+                    final_position = self._controller_adapter.status().position_mm
+                if final_position is None:
+                    raise LinearStageCommunicationError(
+                        human_message="丝杆滑台移动后无法读取最终位置",
+                        agent_message=(
+                            "Linear-stage move completed without a final position."
+                        ),
+                    )
+                self._sync_from_adapter_status(self._controller_adapter.status())
+            else:
+                final_position = self._move_native(
+                    commanded_origin,
+                    target,
+                    tolerance_mm=tolerance,
+                )
         except Exception as exc:
             with self._state_lock:
                 self._moving = False
+                self._homed = False
+                self._commanded_position_mm = None
             if isinstance(exc, L3ConnectionError):
                 self._mark_disconnected()
             raise
@@ -519,9 +607,107 @@ class LinearStageBackend:
             duration_ms=(time.monotonic() - started) * 1000.0,
         )
 
+    def _move_native(
+        self,
+        commanded_origin: float,
+        target: float,
+        *,
+        tolerance_mm: float,
+    ) -> float:
+        """Execute one direct relative Emm command with a bounded completion wait."""
+        distance = target - commanded_origin
+        pulses = round(abs(distance) * self.pulses_per_mm)
+        direction = 0x00 if distance >= 0 else 0x01
+        payload = bytes([direction])
+        payload += self._config.default_speed_rpm.to_bytes(2, "big")
+        payload += bytes([self._config.default_acceleration])
+        payload += pulses.to_bytes(4, "big") + bytes([0x00, 0x00])
+        deadline = time.monotonic() + self._config.move_timeout_s
+        self._enable_for_motion(
+            deadline,
+            action="move_to",
+            timeout_s=self._config.move_timeout_s,
+        )
+        self._command(
+            self._frame(_MOVE_RELATIVE, payload),
+            expected_response_length=4,
+        )
+        with self._state_lock:
+            self._commanded_position_mm = target
+        return self._wait_for_position(target, deadline, tolerance_mm=tolerance_mm)
+
+    def move_absolute(
+        self,
+        position_mm: float,
+        *,
+        idempotency_key: str | None = None,
+        dry_run: bool = False,
+    ) -> LinearStageActionResult:
+        return self.move_to(
+            position_mm,
+            idempotency_key=idempotency_key,
+            dry_run=dry_run,
+        )
+
+    def move_relative(
+        self,
+        delta_mm: float,
+        *,
+        idempotency_key: str | None = None,
+        dry_run: bool = False,
+    ) -> LinearStageActionResult:
+        if not math.isfinite(delta_mm):
+            raise LinearStagePositionOutOfRangeError(
+                human_message=f"丝杆滑台相对位移 {delta_mm!r} mm 无效",
+                agent_message=f"Requested relative move {delta_mm!r} mm is not finite.",
+            )
+        if dry_run:
+            with self._state_lock:
+                current = self._position_mm
+            target = None if current is None else current + float(delta_mm)
+            if target is not None:
+                self._validate_position(target)
+            return self._action_result(
+                action="move_to",
+                target_position_mm=target,
+                final_position_mm=None,
+                dry_run=True,
+                action_description=f"Dry-run relative move by {delta_mm:g} mm.",
+                duration_ms=0.0,
+            )
+        self._ensure_connected()
+        self._ensure_homed()
+        if self._controller_adapter is not None:
+            adapter_status = self._controller_adapter.status()
+            self._sync_from_adapter_status(adapter_status)
+            current = adapter_status.position_mm
+        else:
+            current = self._read_position_mm()
+        if current is None:
+            raise LinearStageCommunicationError(
+                human_message="丝杆滑台相对移动前无法读取实时位置",
+                agent_message=(
+                    "Linear-stage move_relative could not obtain a live position "
+                    "before converting the request to one absolute move."
+                ),
+            )
+        return self.move_to(
+            current + float(delta_mm),
+            idempotency_key=idempotency_key,
+            dry_run=False,
+        )
+
     @observable
     def stop(self) -> LinearStageActionResult:
         """Send the immediate 0xFE stop frame; this method has no idem cache key."""
+        if self._controller_adapter is not None:
+            self._ensure_connected()
+            result = self._controller_adapter.stop()
+            self._sync_from_adapter_status(self._controller_adapter.status())
+            with self._state_lock:
+                self._moving = False
+            return result
+
         self._ensure_connected()
         started = time.monotonic()
         try:
@@ -579,6 +765,49 @@ class LinearStageBackend:
             last_update_ms_ago=age_ms,
         )
 
+    def get_status(self) -> LinearStageStatus:
+        return self.status()
+
+    def get_position(self) -> float | None:
+        if self._controller_adapter is not None:
+            self._ensure_connected()
+            status = self._controller_adapter.status()
+            self._sync_from_adapter_status(status)
+            return status.position_mm
+        self._ensure_connected()
+        return self._read_position_mm()
+
+    def reset_protection(self) -> LinearStageActionResult:
+        if self._controller_adapter is not None:
+            self._ensure_connected()
+            result = self._controller_adapter.reset_protection()
+            self._sync_from_adapter_status(self._controller_adapter.status())
+            return result
+        self._ensure_connected()
+        started = time.monotonic()
+        self._write_only(self._frame(_RESET_PROTECTION, bytes([0x52])))
+        return self._action_result(
+            action="stop",
+            target_position_mm=None,
+            final_position_mm=self.status().position_mm,
+            dry_run=False,
+            action_description="Sent Emm reset-protection frame 0x0E 0x52.",
+            duration_ms=(time.monotonic() - started) * 1000.0,
+        )
+
+    def _sync_from_adapter_status(self, status: LinearStageStatus) -> None:
+        now_monotonic = time.monotonic()
+        now_utc = datetime.now(timezone.utc)
+        with self._state_lock:
+            self._connected = status.connected
+            self._homed = status.homed
+            self._moving = status.moving
+            self._position_mm = status.position_mm
+            self._flags_raw = status.flags_raw
+            self._home_status_raw = status.home_status_raw
+            self._status_timestamp = status.timestamp or now_utc
+            self._status_monotonic = now_monotonic
+
     def _ensure_connected(self) -> None:
         with self._state_lock:
             connected = self._connected
@@ -608,6 +837,7 @@ class LinearStageBackend:
             self._connected = False
             self._homed = False
             self._moving = False
+            self._commanded_position_mm = None
 
     def _validate_position(self, position_mm: float) -> float:
         if (
@@ -683,17 +913,29 @@ class LinearStageBackend:
             if time.monotonic() >= deadline:
                 self._stop_after_timeout("home", self._config.home_timeout_s)
 
-    def _wait_for_position(self, target: float, deadline: float) -> float:
+    def _wait_for_position(
+        self,
+        target: float,
+        deadline: float,
+        *,
+        tolerance_mm: float,
+    ) -> float:
+        stable_reads = 0
         while True:
-            # Reference get_status lines 339-345 reads position before flags.
-            # Each helper opens and releases its own transaction.
+            # Each query owns a separate shared-bus transaction. Position is
+            # sampled first so existing diagnostics retain their established
+            # request/response order; completion semantics remain identical.
             position = self._read_position_mm()
             flags = self._read_flags()
             reasons = self._fault_reasons(flags, require_enabled=True)
             if reasons:
                 self._stop_after_fault(flags, reasons)
-            if abs(position - target) <= self._config.position_tolerance_mm:
-                return position
+            if abs(position - target) <= tolerance_mm:
+                stable_reads += 1
+                if stable_reads >= _REQUIRED_STABLE_POSITION_READS:
+                    return position
+            else:
+                stable_reads = 0
             if time.monotonic() >= deadline:
                 self._stop_after_timeout("move_to", self._config.move_timeout_s)
             self._sleep_until_next_poll(deadline)

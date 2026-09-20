@@ -1,7 +1,7 @@
 """28-series electric-pipette backend over the shared Modbus RTU bus.
 
-The protocol follows the hardware-validated implementation at
-``autospin_system/hardware/pipette/pipette_controller.py``:
+The protocol follows the authoritative legacy behavior source at
+``AutoSpinmotorSystem/hardware/pipette/pipette_controller.py``:
 
 - lines 59-89 define the corrected one-based action codes and the reviewed
   50/1250/1250 motion defaults;
@@ -21,7 +21,7 @@ import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Literal, NoReturn
+from typing import Any, Literal, NoReturn
 
 from pydantic import BaseModel, Field
 
@@ -61,6 +61,7 @@ _ACTION_IMMEDIATE_STOP = 0x08
 _ACTION_ASPIRATE = 0x0A
 _ACTION_DISPENSE = 0x0B
 _ACTION_EJECT_TIP = 0x0C
+_TIP_ABSENCE_CONFIRM_READS = 3
 
 # Manual-recommended values, pipette_controller.py:82-89.  The legacy
 # 10/20/20 values made a real home exceed its 30-second timeout.
@@ -195,7 +196,16 @@ class PipetteActionResult(BaseModel):
     """Result or dry-run description returned by a pipette physical action."""
 
     success: bool
-    action: Literal["home", "aspirate", "dispense", "eject_tip", "stop"]
+    action: Literal[
+        "home",
+        "aspirate",
+        "dispense",
+        "eject_tip",
+        "blowout",
+        "liquid_detect",
+        "reset",
+        "stop",
+    ]
     volume_ul: float | None = Field(
         default=None,
         ge=0,
@@ -227,7 +237,13 @@ def _append_crc(payload: bytes) -> bytes:
 class PipetteBackend:
     """Agent-facing 28-series pipette backend with bounded physical actions."""
 
-    def __init__(self, bus: Rs485Bus, unit_id: int, config: PipetteConfig) -> None:
+    def __init__(
+        self,
+        bus: Rs485Bus,
+        unit_id: int,
+        config: PipetteConfig,
+        controller_adapter: Any | None = None,
+    ) -> None:
         if not 1 <= unit_id <= 247:
             raise ValueError(f"unit_id must be in [1, 247], got {unit_id}")
         if (
@@ -259,6 +275,7 @@ class PipetteBackend:
         self._bus = bus
         self._unit_id = unit_id
         self._config = config
+        self._controller_adapter = controller_adapter
         self._lifecycle_lock = threading.Lock()
         self._state_lock = threading.Lock()
         self._connected = False
@@ -272,6 +289,17 @@ class PipetteBackend:
 
     def connect(self) -> None:
         """Connect idempotently and read one complete snapshot to verify online."""
+        if self._controller_adapter is not None:
+            with self._lifecycle_lock:
+                with self._state_lock:
+                    if self._connected:
+                        return
+                self._controller_adapter.connect()
+                self._sync_from_adapter_status(self._controller_adapter.status())
+                with self._state_lock:
+                    self._connected = True
+                return
+
         with self._lifecycle_lock:
             with self._state_lock:
                 if self._connected:
@@ -291,9 +319,23 @@ class PipetteBackend:
         Rs485Bus 是按物理口的进程级单例，加热台/旋涂同挂——任何单设备
         close 都不许关口（2026-07-16 审查修正）。总线生命周期归组合根管。
         """
+        if self._controller_adapter is not None:
+            with self._lifecycle_lock:
+                self._controller_adapter.close()
+                with self._state_lock:
+                    self._connected = False
+                    self._homed = False
+                return
+
         with self._lifecycle_lock:
             with self._state_lock:
                 self._connected = False
+
+    def disconnect(self) -> None:
+        self.close()
+
+    def shutdown(self) -> None:
+        self.close()
 
     @observable(idempotency_ttl_s=24 * 3600)
     def home(
@@ -316,6 +358,15 @@ class PipetteBackend:
                 action_description=action_description,
                 duration_ms=0.0,
             )
+
+        if self._controller_adapter is not None:
+            self._ensure_connected()
+            result = self._controller_adapter.home(
+                idempotency_key=idempotency_key,
+                dry_run=False,
+            )
+            self._sync_from_adapter_status(self._controller_adapter.status())
+            return result
 
         self._ensure_connected()
         started = time.monotonic()
@@ -368,6 +419,16 @@ class PipetteBackend:
                 duration_ms=0.0,
             )
 
+        if self._controller_adapter is not None:
+            self._ensure_connected()
+            result = self._controller_adapter.aspirate(
+                volume_ul,
+                idempotency_key=idempotency_key,
+                dry_run=False,
+            )
+            self._sync_from_adapter_status(self._controller_adapter.status())
+            return result
+
         self._ensure_connected()
         self._ensure_homed()
         started = time.monotonic()
@@ -415,6 +476,16 @@ class PipetteBackend:
                 duration_ms=0.0,
             )
 
+        if self._controller_adapter is not None:
+            self._ensure_connected()
+            result = self._controller_adapter.dispense(
+                volume_ul,
+                idempotency_key=idempotency_key,
+                dry_run=False,
+            )
+            self._sync_from_adapter_status(self._controller_adapter.status())
+            return result
+
         self._ensure_connected()
         self._ensure_homed()
         started = time.monotonic()
@@ -460,6 +531,15 @@ class PipetteBackend:
                 duration_ms=0.0,
             )
 
+        if self._controller_adapter is not None:
+            self._ensure_connected()
+            result = self._controller_adapter.tip_eject(
+                idempotency_key=idempotency_key,
+                dry_run=False,
+            )
+            self._sync_from_adapter_status(self._controller_adapter.status())
+            return result
+
         self._ensure_connected()
         started = time.monotonic()
         try:
@@ -485,12 +565,103 @@ class PipetteBackend:
             duration_ms=(time.monotonic() - started) * 1000.0,
         )
 
+    def tip_eject(
+        self,
+        *,
+        idempotency_key: str | None = None,
+        dry_run: bool = False,
+    ) -> PipetteActionResult:
+        """Business-name alias for the verified controller's tip_eject method."""
+        return self.eject_tip(idempotency_key=idempotency_key, dry_run=dry_run)
+
+    @observable
+    def blowout(
+        self,
+        *,
+        idempotency_key: str | None = None,
+        dry_run: bool = False,
+    ) -> PipetteActionResult:
+        if dry_run:
+            return self._action_result(
+                action="blowout",
+                volume_ul=None,
+                dry_run=True,
+                action_description="Dry-run pipette blowout; no bytes sent.",
+                duration_ms=0.0,
+            )
+        if self._controller_adapter is not None:
+            self._ensure_connected()
+            result = self._controller_adapter.blowout(
+                idempotency_key=idempotency_key,
+                dry_run=False,
+            )
+            self._sync_from_adapter_status(self._controller_adapter.status())
+            return result
+        self._ensure_connected()
+        self._ensure_homed()
+        started = time.monotonic()
+        self._write_single_register(_REG_CTRL, _ACTION_DISPENSE)
+        self._wait_for_action_cycle(
+            register=_REG_DISPENSE_STATE,
+            active_mask=0xFFFF,
+            action="dispense",
+        )
+        return self._action_result(
+            action="blowout",
+            volume_ul=None,
+            dry_run=False,
+            action_description="Wrote CTRL=0x0B for pipette blowout.",
+            duration_ms=(time.monotonic() - started) * 1000.0,
+        )
+
+    @observable
+    def liquid_detect(
+        self,
+        *,
+        idempotency_key: str | None = None,
+        dry_run: bool = False,
+    ) -> PipetteActionResult:
+        if dry_run:
+            return self._action_result(
+                action="liquid_detect",
+                volume_ul=None,
+                dry_run=True,
+                action_description="Dry-run pipette liquid detect; no bytes sent.",
+                duration_ms=0.0,
+            )
+        if self._controller_adapter is not None:
+            self._ensure_connected()
+            result = self._controller_adapter.liquid_detect(
+                idempotency_key=idempotency_key,
+                dry_run=False,
+            )
+            self._sync_from_adapter_status(self._controller_adapter.status())
+            return result
+        self._ensure_connected()
+        started = time.monotonic()
+        self._write_single_register(_REG_CTRL, 0x09)
+        return self._action_result(
+            action="liquid_detect",
+            volume_ul=None,
+            dry_run=False,
+            action_description="Wrote CTRL=0x09 for pipette liquid detect.",
+            duration_ms=(time.monotonic() - started) * 1000.0,
+        )
+
     def stop(self) -> PipetteActionResult:
         """立即写 IMM_STOP（0x08），急停级动作：无幂等缓存、不等待、不做 dry_run。
 
         柱塞停在当前位置后位置不再可信，homed 复位——继续吸/排前必须重新
         home。供 SystemEstop 与面板急停调用。
         """
+        if self._controller_adapter is not None:
+            self._ensure_connected()
+            result = self._controller_adapter.stop()
+            self._sync_from_adapter_status(self._controller_adapter.status())
+            with self._state_lock:
+                self._homed = False
+            return result
+
         self._ensure_connected()
         started = time.monotonic()
         try:
@@ -508,6 +679,15 @@ class PipetteBackend:
             "is now untrusted and the pipette requires re-homing",
             duration_ms=(time.monotonic() - started) * 1000.0,
         )
+
+    def reset(self) -> PipetteActionResult:
+        if self._controller_adapter is not None:
+            self._ensure_connected()
+            result = self._controller_adapter.reset()
+            self._sync_from_adapter_status(self._controller_adapter.status())
+            return result
+        self.stop()
+        return self.home(idempotency_key=None, dry_run=False)
 
     def status(self) -> PipetteStatus:
         """Return the latest status snapshot without touching the RS485 bus."""
@@ -537,6 +717,32 @@ class PipetteBackend:
             last_update_ms_ago=age_ms,
         )
 
+    def get_status(self) -> PipetteStatus:
+        return self.status()
+
+    def refresh_status(self) -> PipetteStatus:
+        """Refresh live tip/action feedback after a mechanical tip mount."""
+        self._ensure_connected()
+        if self._controller_adapter is not None:
+            status = self._controller_adapter.refresh_status()
+            self._sync_from_adapter_status(status)
+        else:
+            self._refresh_status_snapshot()
+        return self.status()
+
+    def _sync_from_adapter_status(self, status: PipetteStatus) -> None:
+        now_monotonic = time.monotonic()
+        now_utc = datetime.now(timezone.utc)
+        with self._state_lock:
+            self._connected = status.connected
+            self._homed = status.homed
+            self._status_word = status.status_word
+            self._driver_fault = status.driver_fault
+            self._position_steps = status.position_steps
+            self._tip_present = status.tip_present
+            self._status_timestamp = status.timestamp or now_utc
+            self._status_monotonic = now_monotonic
+
     def _ensure_connected(self) -> None:
         with self._state_lock:
             connected = self._connected
@@ -565,12 +771,18 @@ class PipetteBackend:
             )
 
     def _ensure_tip_present_live(self) -> None:
-        if not self._read_and_cache_tip_present():
+        for attempt in range(_TIP_ABSENCE_CONFIRM_READS):
+            if self._read_and_cache_tip_present():
+                return
+            if attempt + 1 < _TIP_ABSENCE_CONFIRM_READS:
+                time.sleep(self._config.poll_interval_s)
+        if self._tip_present is not True:
             raise PipetteTipMissingError(
                 human_message="未检测到移液吸头",
                 agent_message=(
-                    "The live pipette tip-present register is 0. Install a compatible "
-                    "tip before retrying; no liquid-motion command was sent."
+                    "The live pipette tip-present register remained 0 for three "
+                    "consecutive reads. Install a compatible tip before retrying; "
+                    "no liquid-motion command was sent."
                 ),
             )
 
@@ -903,7 +1115,16 @@ class PipetteBackend:
     @staticmethod
     def _action_result(
         *,
-        action: Literal["home", "aspirate", "dispense", "eject_tip", "stop"],
+        action: Literal[
+            "home",
+            "aspirate",
+            "dispense",
+            "eject_tip",
+            "blowout",
+            "liquid_detect",
+            "reset",
+            "stop",
+        ],
         volume_ul: float | None,
         dry_run: bool,
         action_description: str,

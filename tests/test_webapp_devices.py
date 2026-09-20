@@ -85,6 +85,10 @@ class _FakeSpincoater:
         self.calls.append(("start", rpm, idempotency_key))
         return {"target_rpm": rpm}
 
+    def set_deceleration(self, rpm_per_s: float) -> object:
+        self.calls.append(("set_deceleration", rpm_per_s))
+        return {"deceleration_rpm_per_s": rpm_per_s}
+
     def stop(
         self,
         *,
@@ -648,6 +652,23 @@ def test_spincoater_stop_defaults_to_brake() -> None:
 
     assert record["status"] == "succeeded"
     assert devices.spincoater.calls == [("stop", True, operation_id)]
+
+
+def test_spincoater_deceleration_route_updates_normal_stop_ramp() -> None:
+    devices = _FakeDevices()
+    app = create_app(devices.registry(), token=TOKEN)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/spincoater/deceleration",
+            headers=AUTH_HEADERS,
+            json={"rpm_per_s": 350.0},
+        )
+        operation_id = _assert_accepted(response)
+        record = _wait_for_operation(client, operation_id)
+
+    assert record["status"] == "succeeded"
+    assert devices.spincoater.calls == [("set_deceleration", 350.0)]
 
 
 @pytest.mark.parametrize(

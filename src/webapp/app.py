@@ -41,6 +41,10 @@ from .registry import DeviceRegistry
 from .routes_devices import register_device_routes
 from .routes_gantry import register_gantry_routes
 from .routes_routines import register_routine_routes
+from .routes_configuration import register_configuration_routes
+from .routes_experiments import register_experiment_routes
+from ..coordinates import CoordinateRegistry
+from ..recipe_storage import resolve_recipes_path
 
 
 _STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -59,6 +63,8 @@ def create_app(
     *,
     token: str,
     routines_path: str | Path = Path("runtime/routines"),
+    coordinates_path: str | Path = Path("config/coordinates.yaml"),
+    recipes_path: str | Path | None = None,
 ) -> FastAPI:
     """为一个注册表创建独立的 Web 应用实例。"""
 
@@ -99,8 +105,9 @@ def create_app(
     )
     app.state.registry = registry
     app.state.operation_gate = operation_gate
+    app.state.recipes_path = resolve_recipes_path(recipes_path)
     # 急停必须先于后续业务路由和任何未来重逻辑中间件注册。
-    register_estop_route(app, registry)
+    register_estop_route(app, registry, operation_gate)
     register_operation_status_routes(app, operation_poller)
     register_operation_routes(app, operation_gate)
     register_gantry_routes(app, registry, operation_gate)
@@ -110,6 +117,20 @@ def create_app(
         registry,
         operation_gate,
         base_dir=routines_path,
+    )
+    coordinate_registry = CoordinateRegistry.from_yaml(coordinates_path)
+    register_configuration_routes(
+        app,
+        routines_path=routines_path,
+        coordinates_path=coordinates_path,
+        recipes_path=recipes_path,
+    )
+    register_experiment_routes(
+        app,
+        registry,
+        operation_gate,
+        coordinate_registry,
+        recipes_path=recipes_path,
     )
     app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 

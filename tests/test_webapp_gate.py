@@ -124,6 +124,32 @@ def test_success_result_and_elapsed_are_recorded() -> None:
     assert record.elapsed > 0.0
 
 
+def test_estop_aborts_running_operation_and_ignores_late_result() -> None:
+    gate = OperationGate()
+    release = threading.Event()
+
+    accepted = gate.submit(
+        "spincoater",
+        "start",
+        lambda _: release.wait(timeout=1.0) or {"started": True},
+    )
+    aborted = gate.abort_current_after_estop()
+
+    assert aborted is not None
+    assert aborted.id == accepted.id
+    assert aborted.status == "failed"
+    assert aborted.error is not None
+    assert aborted.error.error_code == "L3.OPERATION_ABORTED_BY_ESTOP"
+    assert gate.current() is None
+
+    next_operation = gate.try_start("spincoater", "start")
+    assert next_operation.status == "running"
+    release.set()
+    time.sleep(0.01)
+    assert gate.current() is not None
+    assert gate.current().id == next_operation.id
+
+
 def test_history_is_a_50_entry_ring_buffer() -> None:
     gate = OperationGate()
     operation_ids: list[str] = []

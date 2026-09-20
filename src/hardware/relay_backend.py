@@ -35,12 +35,16 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Optional, Union
+from typing import Mapping, Optional, Union
 
 import serial
 
 from ..observable import observable
 from .errors import RelayCommunicationError
+from .serial_resources import (
+    ResourceHandle,
+    SerialResourceManager,
+)
 from .types import RelayActionPlan, RelayActionResult, RelayState
 
 
@@ -78,10 +82,17 @@ class RelayBackend:
         port: str = DEFAULT_PORT,
         baud: int = DEFAULT_BAUD,
         settle_s: float = _SETTLE_S,
+        channel_map: Mapping[str, int] | None = None,
+        resource_manager: SerialResourceManager | None = None,
     ) -> None:
         self.port = port
         self.baud = baud
         self._settle_s = settle_s
+        self._channel_map = dict(channel_map or {})
+        self._resource_manager = resource_manager or SerialResourceManager()
+        self._resource_handle: ResourceHandle = self._resource_manager.register(
+            port, "RelayBackend"
+        )
         self._ser: Optional[serial.Serial] = None
         self._write_lock = threading.Lock()
         self._state_lock = threading.Lock()
@@ -99,7 +110,15 @@ class RelayBackend:
         if self._ser is not None:
             return  # 已连，幂等
         try:
-            self._ser = serial.Serial(self.port, self.baud, timeout=1.0)
+            with self._resource_manager.transaction(
+                self._resource_handle, "relay.connect"
+            ):
+                self._ser = self._resource_manager.open_serial(
+                    self._resource_handle,
+                    baudrate=self.baud,
+                    timeout=1.0,
+                    exclusive=True,
+                )
         except (serial.SerialException, OSError) as e:
             raise RelayCommunicationError(
                 human_message=f"无法打开继电器串口 {self.port}",
@@ -111,12 +130,26 @@ class RelayBackend:
         time.sleep(_RECONNECT_BACKOFF_S)
 
     def close(self) -> None:
-        if self._ser is not None:
-            try:
-                self._ser.close()
-            except Exception:
-                pass
-        self._ser = None
+        with self._resource_manager.transaction(
+            self._resource_handle, "relay.close"
+        ):
+            if self._ser is not None:
+                try:
+                    self._ser.close()
+                except Exception:
+                    pass
+            self._ser = None
+            self._resource_manager.mark_disconnected(self._resource_handle)
+
+    def disconnect(self) -> None:
+        self.close()
+
+    def shutdown(self) -> None:
+        self.close()
+
+    def dispose(self) -> None:
+        self.close()
+        self._resource_handle.release()
 
     def is_connected(self) -> bool:
         return self._ser is not None
@@ -137,6 +170,70 @@ class RelayBackend:
             channels=channels,
             last_update_ms_ago=last_update_ms_ago,
         )
+
+    def _resolve_channel(self, name_or_channel: int | str) -> int:
+        if isinstance(name_or_channel, int):
+            channel = name_or_channel
+        else:
+            if name_or_channel.isdigit():
+                channel = int(name_or_channel)
+            elif name_or_channel in self._channel_map:
+                channel = self._channel_map[name_or_channel]
+            else:
+                raise RelayCommunicationError(
+                    human_message=f"未知继电器通道: {name_or_channel}",
+                    agent_message=(
+                        f"Relay channel {name_or_channel!r} is not a number and "
+                        "is not present in channel_map."
+                    ),
+                )
+        _validate_channel(channel)
+        return channel
+
+    def on(
+        self,
+        name_or_channel: int | str,
+        *,
+        idempotency_key: str,
+        dry_run: bool = False,
+    ) -> Union[RelayActionResult, RelayActionPlan]:
+        return self.ch_on(
+            self._resolve_channel(name_or_channel),
+            idempotency_key=idempotency_key,
+            dry_run=dry_run,
+        )
+
+    def off(
+        self,
+        name_or_channel: int | str,
+        *,
+        idempotency_key: str,
+        dry_run: bool = False,
+    ) -> Union[RelayActionResult, RelayActionPlan]:
+        return self.ch_off(
+            self._resolve_channel(name_or_channel),
+            idempotency_key=idempotency_key,
+            dry_run=dry_run,
+        )
+
+    def all_off(self, *, dry_run: bool = False) -> RelayState | list[RelayActionPlan]:
+        if dry_run:
+            plans: list[RelayActionPlan] = []
+            for channel in range(_CHANNEL_MIN, _CHANNEL_MAX + 1):
+                result = self.ch_off(
+                    channel,
+                    idempotency_key=f"relay-all-off-dry-{channel}",
+                    dry_run=True,
+                )
+                assert isinstance(result, RelayActionPlan)
+                plans.append(result)
+            return plans
+        for channel in range(_CHANNEL_MIN, _CHANNEL_MAX + 1):
+            self._force_set_channel(channel, False)
+        return self.get_state()
+
+    def emergency_stop(self) -> RelayState:
+        return self.all_off(dry_run=False)  # type: ignore[return-value]
 
     # ─────────────────────── 写路径（@observable 包装） ───────────────────────
 
@@ -161,6 +258,38 @@ class RelayBackend:
     ) -> Union[RelayActionResult, RelayActionPlan]:
         """关闭通道——断 24V 输出。幂等：已 OFF 时 was_noop=True。"""
         return self._set_channel(channel, target=False, dry_run=dry_run)
+
+    @observable
+    def force_set(
+        self,
+        channel: int,
+        on: bool,
+        *,
+        idempotency_key: str,
+        dry_run: bool = False,
+    ) -> Union[RelayActionResult, RelayActionPlan]:
+        """Always write the requested physical state, bypassing optimistic memo."""
+        del idempotency_key
+        _validate_channel(channel)
+        with self._state_lock:
+            current = self._channels.get(channel, False)
+        if dry_run:
+            return RelayActionPlan(
+                channel=channel,
+                target_state=on,
+                current_state=current,
+                would_write=True,
+            )
+        started = time.time()
+        self._force_set_channel(channel, on)
+        return RelayActionResult(
+            success=True,
+            channel=channel,
+            state_after=on,
+            was_noop=False,
+            duration_ms=(time.time() - started) * 1000.0,
+            event_id="",
+        )
 
     def _set_channel(
         self,
@@ -292,7 +421,15 @@ class RelayBackend:
             pass
         self._ser = None
         try:
-            self._ser = serial.Serial(self.port, self.baud, timeout=1.0)
+            self._ser = self._resource_manager.open_serial(
+                self._resource_handle,
+                baudrate=self.baud,
+                timeout=1.0,
+                exclusive=True,
+            )
             time.sleep(_RECONNECT_BACKOFF_S)
-        except (serial.SerialException, OSError):
+        except (serial.SerialException, OSError) as exc:
             self._ser = None
+            self._resource_manager.mark_disconnected(
+                self._resource_handle, exc
+            )

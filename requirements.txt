@@ -25,6 +25,8 @@ pydantic-settings==2.14.0
 
 # ── 硬件串口（Phase 3.0 起）──
 pyserial==3.5
+pymodbus==3.13.0
+PyYAML==6.0.3
 
 # ── UI（Phase 3.1 起）──
 streamlit==1.56.0

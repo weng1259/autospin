@@ -1,8 +1,8 @@
 """AI-516P heating-stage backend over the shared Modbus RTU bus.
 
-The register map and temperature conversion follow the validated legacy
-implementation at
-``autospin_system/hardware/heating_stage/heating_stage_controller.py``:
+The register map and temperature conversion follow the authoritative legacy
+behavior source at
+``AutoSpinmotorSystem/hardware/heating_stage/heating_stage_controller.py``:
 
 - lines 26-31: PV register 74, SV register 0, Srun register 27, scale 10;
 - lines 133-146: write SV first, then write ``Srun=0`` to enter run mode.
@@ -19,6 +19,7 @@ import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -106,6 +107,18 @@ class HeaterActionResult(BaseModel):
     event_id: str
 
 
+class HeaterStabilityResult(BaseModel):
+    """Result returned by :meth:`wait_until_stable`."""
+
+    success: bool
+    target_c: float
+    pv_c: float | None
+    tolerance_c: float = Field(ge=0)
+    stable_samples: int = Field(ge=1)
+    elapsed_ms: float = Field(ge=0)
+    timed_out: bool
+
+
 def _crc16(data: bytes) -> int:
     """Return the standard Modbus RTU CRC-16 value for *data*."""
     crc = 0xFFFF
@@ -126,7 +139,13 @@ def _append_crc(payload: bytes) -> bytes:
 class HeaterBackend:
     """Agent-facing AI-516P backend using device-semantic temperature APIs."""
 
-    def __init__(self, bus: Rs485Bus, unit_id: int, config: HeaterConfig) -> None:
+    def __init__(
+        self,
+        bus: Rs485Bus,
+        unit_id: int,
+        config: HeaterConfig,
+        controller_adapter: Any | None = None,
+    ) -> None:
         if not 1 <= unit_id <= 247:
             raise ValueError(f"unit_id must be in [1, 247], got {unit_id}")
         if config.baudrate <= 0 or config.timeout_s <= 0 or config.scale <= 0:
@@ -142,6 +161,7 @@ class HeaterBackend:
         self._bus = bus
         self._unit_id = unit_id
         self._config = config
+        self._controller_adapter = controller_adapter
         self._lifecycle_lock = threading.Lock()
         self._state_lock = threading.Lock()
         self._connected = False
@@ -152,6 +172,17 @@ class HeaterBackend:
 
     def connect(self) -> None:
         """Connect idempotently and read one PV value to verify the heater."""
+        if self._controller_adapter is not None:
+            with self._lifecycle_lock:
+                with self._state_lock:
+                    if self._connected:
+                        return
+                self._controller_adapter.connect()
+                self._sync_from_adapter_status(self._controller_adapter.status())
+                with self._state_lock:
+                    self._connected = True
+                return
+
         with self._lifecycle_lock:
             with self._state_lock:
                 if self._connected:
@@ -171,12 +202,33 @@ class HeaterBackend:
         Rs485Bus 是按物理口的进程级单例，旋涂/移液同挂——任何单设备
         close 都不许关口（2026-07-16 审查修正）。总线生命周期归组合根管。
         """
+        if self._controller_adapter is not None:
+            with self._lifecycle_lock:
+                self._controller_adapter.close()
+                with self._state_lock:
+                    self._connected = False
+                return
+
         with self._lifecycle_lock:
             with self._state_lock:
                 self._connected = False
 
+    def disconnect(self) -> None:
+        """Alias used by experiment-facing APIs."""
+        self.close()
+
+    def shutdown(self) -> None:
+        """Shutdown hook used by orchestration code."""
+        self.close()
+
     def read_pv(self) -> HeaterStatus:
         """Read one current-temperature snapshot from PV register 74."""
+        if self._controller_adapter is not None:
+            self._ensure_connected()
+            status = self._controller_adapter.read_pv()
+            self._sync_from_adapter_status(status)
+            return self.status()
+
         self._ensure_connected()
         try:
             raw = self._read_holding_register(self._config.pv_register)
@@ -192,6 +244,10 @@ class HeaterBackend:
             self._last_pv_timestamp = now_utc
             self._last_pv_monotonic = now_monotonic
         return self.status()
+
+    def get_temperature(self) -> HeaterStatus:
+        """Read the current process temperature."""
+        return self.read_pv()
 
     @observable
     def set_sv(
@@ -223,6 +279,16 @@ class HeaterBackend:
                 event_id="",
             )
 
+        if self._controller_adapter is not None:
+            self._ensure_connected()
+            result = self._controller_adapter.set_sv(
+                sv_c,
+                idempotency_key=idempotency_key,
+                dry_run=False,
+            )
+            self._sync_from_adapter_status(self._controller_adapter.status())
+            return result
+
         self._ensure_connected()
         started = time.monotonic()
         try:
@@ -246,6 +312,172 @@ class HeaterBackend:
             event_id="",
         )
 
+    def set_temperature(
+        self,
+        value: float,
+        *,
+        idempotency_key: str | None = None,
+        dry_run: bool = False,
+    ) -> HeaterActionResult:
+        """Set the target temperature in degrees Celsius."""
+        return self.set_sv(value, idempotency_key=idempotency_key, dry_run=dry_run)
+
+    def run(self) -> HeaterActionResult:
+        """Ensure the current SV is active on controllers that expose run()."""
+        if self._controller_adapter is not None:
+            self._ensure_connected()
+            run = getattr(self._controller_adapter, "run", None)
+            if callable(run):
+                run()
+            return HeaterActionResult(
+                success=True,
+                target_sv_c=self.status().sv_c or 0.0,
+                dry_run=False,
+                action_description="Run requested through verified heater adapter.",
+                duration_ms=0.0,
+                event_id="",
+            )
+        if self._config.run_on_sv_write:
+            self._ensure_connected()
+            self._write_single_register(self._config.srun_register, 0)
+        return HeaterActionResult(
+            success=True,
+            target_sv_c=self.status().sv_c or 0.0,
+            dry_run=False,
+            action_description="Wrote Srun=0 to keep AI-516 fixed-point control active.",
+            duration_ms=0.0,
+            event_id="",
+        )
+
+    def start(self) -> HeaterActionResult:
+        """Alias for :meth:`run` for routine-facing symmetry."""
+        return self.run()
+
+    def stop(
+        self,
+        *,
+        idempotency_key: str | None = None,
+        dry_run: bool = False,
+    ) -> HeaterActionResult:
+        """Backend safety stop: command a 0 C setpoint without rewriting the controller."""
+        return self.set_sv(0.0, idempotency_key=idempotency_key, dry_run=dry_run)
+
+    def wait_until_stable(
+        self,
+        *,
+        target_c: float | None = None,
+        tolerance_c: float = 1.0,
+        stable_samples: int = 3,
+        timeout_s: float = 600.0,
+        poll_interval_s: float = 2.0,
+        abort_check: Any | None = None,
+    ) -> HeaterStabilityResult:
+        """Poll PV until it stays within tolerance for consecutive samples."""
+        if tolerance_c < 0:
+            raise ValueError("tolerance_c must be non-negative")
+        if stable_samples < 1:
+            raise ValueError("stable_samples must be at least 1")
+        if timeout_s <= 0 or poll_interval_s <= 0:
+            raise ValueError("timeout_s and poll_interval_s must be positive")
+        status = self.status()
+        target = status.sv_c if target_c is None else target_c
+        if target is None:
+            raise ValueError("target_c is required when no SV has been commanded")
+
+        started = time.monotonic()
+        deadline = started + timeout_s
+        consecutive = 0
+        last_pv: float | None = None
+        while True:
+            if abort_check is not None and abort_check():
+                raise RuntimeError("heater stability wait cancelled")
+            status = self.read_pv()
+            last_pv = status.pv_c
+            if last_pv is not None and abs(last_pv - target) <= tolerance_c:
+                consecutive += 1
+                if consecutive >= stable_samples:
+                    return HeaterStabilityResult(
+                        success=True,
+                        target_c=target,
+                        pv_c=last_pv,
+                        tolerance_c=tolerance_c,
+                        stable_samples=stable_samples,
+                        elapsed_ms=(time.monotonic() - started) * 1000.0,
+                        timed_out=False,
+                    )
+            else:
+                consecutive = 0
+            if time.monotonic() >= deadline:
+                return HeaterStabilityResult(
+                    success=False,
+                    target_c=target,
+                    pv_c=last_pv,
+                    tolerance_c=tolerance_c,
+                    stable_samples=stable_samples,
+                    elapsed_ms=(time.monotonic() - started) * 1000.0,
+                    timed_out=True,
+                )
+            sleep_s = min(poll_interval_s, max(0.0, deadline - time.monotonic()))
+            if abort_check is not None and abort_check():
+                raise RuntimeError("heater stability wait cancelled")
+            time.sleep(sleep_s)
+
+    def wait_until_at_least(
+        self,
+        *,
+        minimum_c: float,
+        target_c: float,
+        stable_samples: int = 1,
+        timeout_s: float = 600.0,
+        poll_interval_s: float = 2.0,
+        abort_check: Any | None = None,
+    ) -> HeaterStabilityResult:
+        """Wait for a heating PV threshold without treating overshoot as unready."""
+        if minimum_c < 0 or target_c < minimum_c:
+            raise ValueError("heater readiness requires 0 <= minimum_c <= target_c")
+        if stable_samples < 1:
+            raise ValueError("stable_samples must be at least 1")
+        if timeout_s <= 0 or poll_interval_s <= 0:
+            raise ValueError("timeout_s and poll_interval_s must be positive")
+
+        started = time.monotonic()
+        deadline = started + timeout_s
+        consecutive = 0
+        last_pv: float | None = None
+        while True:
+            if abort_check is not None and abort_check():
+                raise RuntimeError("heater readiness wait cancelled")
+            status = self.read_pv()
+            last_pv = status.pv_c
+            if last_pv is not None and last_pv >= minimum_c:
+                consecutive += 1
+                if consecutive >= stable_samples:
+                    return HeaterStabilityResult(
+                        success=True,
+                        target_c=target_c,
+                        pv_c=last_pv,
+                        tolerance_c=target_c - minimum_c,
+                        stable_samples=stable_samples,
+                        elapsed_ms=(time.monotonic() - started) * 1000.0,
+                        timed_out=False,
+                    )
+            else:
+                consecutive = 0
+            if time.monotonic() >= deadline:
+                return HeaterStabilityResult(
+                    success=False,
+                    target_c=target_c,
+                    pv_c=last_pv,
+                    tolerance_c=target_c - minimum_c,
+                    stable_samples=stable_samples,
+                    elapsed_ms=(time.monotonic() - started) * 1000.0,
+                    timed_out=True,
+                )
+            sleep_s = min(poll_interval_s, max(0.0, deadline - time.monotonic()))
+            if abort_check is not None and abort_check():
+                raise RuntimeError("heater readiness wait cancelled")
+            time.sleep(sleep_s)
+
     def status(self) -> HeaterStatus:
         """Return the latest PV/SV snapshot without touching the RS485 bus."""
         with self._state_lock:
@@ -267,6 +499,21 @@ class HeaterBackend:
             timestamp=timestamp,
             last_update_ms_ago=age_ms,
         )
+
+    def get_status(self) -> HeaterStatus:
+        """Alias used by routine and web-facing code."""
+        return self.status()
+
+    def _sync_from_adapter_status(self, status: HeaterStatus) -> None:
+        now_monotonic = time.monotonic()
+        now_utc = datetime.now(timezone.utc)
+        with self._state_lock:
+            self._connected = status.connected
+            self._last_pv_c = status.pv_c
+            self._last_sv_c = status.sv_c
+            if status.pv_c is not None:
+                self._last_pv_timestamp = status.timestamp or now_utc
+                self._last_pv_monotonic = now_monotonic
 
     def _ensure_connected(self) -> None:
         with self._state_lock:

@@ -1,0 +1,258 @@
+coordinate_system:
+  version: 2
+  units: mm
+  frame: grbl_machine_negative
+  axis_conventions:
+    x: "negative from the homed positive-limit pull-off"
+    y: "negative from the homed positive-limit pull-off"
+    z: "negative downward from the homed positive-limit pull-off"
+  homing_reference: "Observed GRBL pull-off position is approximately [-4.999, -4.999, -4.999] mm; observation only."
+  verified_limits:
+    x_min_mm: -310.0
+    x_max_mm: -5.0
+    y_min_mm: -310.0
+    y_max_mm: -5.0
+    z_min_mm: -110.0
+    z_max_mm: -5.0
+  calibration_date: null
+  calibration_source: "AutoSpinmotorSystem/config/process_coordinates.yaml version 2"
+  requires_hardware_confirmation: true
+
+global_safe_positions:
+  home_pull_off:
+    xyz: [-4.999, -4.999, -4.999]
+    unit: mm
+    frame: grbl_machine_negative
+    source: "Phase 2 requirement: verified homing pull-off observation"
+    confidence: high
+    requires_hardware_confirmation: false
+    executable: false
+    notes: "Observed machine state, not a general process target."
+  safe_travel:
+    xyz: [-5.0, -5.0, -30.0]
+    unit: mm
+    frame: grbl_machine_negative
+    source: "AutoSpinmotorSystem/config/process_coordinates.yaml:safety.xyz_stage.safe_z"
+    confidence: high
+    requires_hardware_confirmation: false
+    executable: true
+    notes: "X/Y are anchors only; preflight uses Z=-30.0 at the current or destination XY."
+
+stations:
+  spin_coater:
+    requires_safe_approach: true
+    # operation is the gripper placement origin. Changing operation.xyz also
+    # updates the safe/retract X/Y; their safe Z remains fixed at -30 mm.
+    grid:
+      origin_point: operation
+      rows: 1
+      columns: 1
+      step_xyz_mm: [0.0, 0.0, 0.0]
+      index_order: row_major
+      named_points:
+        safe_above:
+          row: 0
+          column: 0
+          z_mm: -30.0
+        retract:
+          row: 0
+          column: 0
+          z_mm: -30.0
+    operation:
+      xyz: [-13.0, -40, -84]
+      unit: mm
+      frame: grbl_machine_negative
+      source: "AutoSpinmotorSystem/config/process_coordinates.yaml:baseline_positions.glass.place_on_spincoater"
+      confidence: high
+      requires_hardware_confirmation: false
+      executable: true
+    pipette_dispense:
+      xyz: [-105.0, -6, -30.0]
+      linear_stage_position_mm: 35.0
+      unit: mm
+      frame: grbl_machine_negative
+      source: "AutoSpinmotorSystem/config/process_coordinates.yaml:baseline_positions.pipette_tip_on_pipette.align_to_spincoater_center"
+      confidence: high
+      requires_hardware_confirmation: false
+      executable: true
+
+  hotplate:
+    requires_safe_approach: true
+    # place is slot 1. Changing place.xyz translates the complete hotplate;
+    # safe_above/retract follow its X/Y and retain the fixed safe Z.
+    grid:
+      origin_point: place
+      rows: 3
+      columns: 3
+      step_xyz_mm: [25.0, -20.0, 0.0]
+      index_order: row_major
+      named_points:
+        safe_above:
+          row: 0
+          column: 0
+          z_mm: -30.0
+        retract:
+          row: 0
+          column: 0
+          z_mm: -30.0
+    place:
+      xyz: [-295.0, -5.0, -99]
+      unit: mm
+      frame: grbl_machine_negative
+      source: "AutoSpinmotorSystem/config/process_coordinates.yaml:baseline_positions.glass.place_on_hotplate"
+      confidence: high
+      requires_hardware_confirmation: false
+      executable: true
+
+  substrate_rack:
+    requires_safe_approach: false
+    # pickup is slot 1. Edit pickup.xyz to translate the complete 4x4 rack.
+    grid:
+      origin_point: pickup
+      rows: 4
+      columns: 4
+      step_xyz_mm: [-46.33, -24.33, 0.3]
+      index_order: row_major
+    pickup:
+      xyz: [-148.0, -172.5, -74.5]
+      unit: mm
+      frame: grbl_machine_negative
+      source: "AutoSpinmotorSystem/config/process_coordinates.yaml:baseline_positions.glass.first_pick"
+      confidence: high
+      requires_hardware_confirmation: false
+      executable: true
+
+  tip_rack:
+    requires_safe_approach: false
+    # pickup is slot 1. Edit pickup.xyz to translate the complete 8x12 rack.
+    grid:
+      origin_point: pickup
+      rows: 12
+      columns: 8
+      step_xyz_mm: [9.0, -9.0, 0.0]
+      index_order: row_major
+      named_points:
+        pickup_2:
+          row: 0
+          column: 1
+    pickup:
+      xyz: [-74.5, -92, -80.0]
+      linear_stage_position_mm: 75.0
+      linear_stage_position_tolerance_mm: 3.0
+      unit: mm
+      frame: grbl_machine_negative
+      source: "AutoSpinmotorSystem/config/process_coordinates.yaml:baseline_positions.pipette_tip.first_pick"
+      confidence: high
+      requires_hardware_confirmation: false
+      executable: true
+
+  reagent_rack:
+    requires_safe_approach: false
+    # precursor_1 is the grid origin. All other liquid positions are derived
+    # from it, so translating the rack only requires editing precursor_1.xyz.
+    grid:
+      origin_point: precursor_1
+      rows: 2
+      columns: 3
+      step_xyz_mm: [-40.0, -40.0, 0.0]
+      index_order: row_major
+      named_points:
+        precursor_2:
+          row: 0
+          column: 1
+          confidence: medium
+          requires_hardware_confirmation: true
+          executable: false
+        precursor_3:
+          row: 1
+          column: 1
+          confidence: medium
+          requires_hardware_confirmation: true
+          executable: false
+        precursor_4:
+          row: 0
+          column: 2
+          confidence: medium
+          requires_hardware_confirmation: true
+          executable: false
+        precursor_5:
+          row: 1
+          column: 2
+          confidence: medium
+          requires_hardware_confirmation: true
+          executable: false
+        antisolvent:
+          row: 1
+          column: 0
+          confidence: high
+          requires_hardware_confirmation: false
+          executable: true
+    precursor_1:
+      xyz: [-186.0, -15.0, -80.0]
+      linear_stage_position_mm: 82.0
+      unit: mm
+      frame: grbl_machine_negative
+      source: "AutoSpinmotorSystem/config/process_coordinates.yaml:baseline_positions.liquid.aspirate"
+      confidence: high
+      requires_hardware_confirmation: false
+      executable: true
+
+  waste:
+    requires_safe_approach: false
+    tip_eject:
+      xyz: [-120.0, -130.0, -30.0]
+      unit: mm
+      frame: grbl_machine_negative
+      source: "AutoSpinmotorSystem/config/process_coordinates.yaml:baseline_positions.waste.tip_eject"
+      confidence: high
+      requires_hardware_confirmation: false
+      executable: true
+
+tool_offsets: {}
+
+calibration:
+  linear_stage_safe_position:
+    value: 10.0
+    unit: mm
+    source: "AutoSpinmotorSystem/config/process_coordinates.yaml:safety.linear_stage.safe_position"
+    confidence: high
+    requires_hardware_confirmation: true
+    notes: "RS485-controlled single-axis linear stage; not a Gantry coordinate."
+  linear_stage_glass_contact:
+    value: 42.0
+    unit: mm
+    source: "AutoSpinmotorSystem/config/process_coordinates.yaml:safety.linear_stage.glass_contact_position"
+    confidence: medium
+    requires_hardware_confirmation: true
+    notes: "Conflicts with 43.0 in align_to_spincoater_center metadata."
+  pipette_dispense_stage_position:
+    value: 35.0
+    unit: mm
+    source: "AutoSpinmotorSystem/config/process_coordinates.yaml:baseline_positions.pipette_tip_on_pipette.align_to_spincoater_center.linear_stage_absolute_position"
+    confidence: high
+    requires_hardware_confirmation: true
+  tip_to_glass_clearance:
+    value: 7.0
+    unit: mm
+    source: "AutoSpinmotorSystem/config/process_coordinates.yaml:baseline_positions.pipette_tip_on_pipette.*_tip_to_glass_clearance"
+    confidence: high
+    requires_hardware_confirmation: true
+
+aliases:
+  spin_center:
+    target: stations.spin_coater.pipette_dispense
+    deprecated: true
+    confidence: medium
+    source: "AutoSpinmotorSystem/example_experiment.py:42-43"
+  waste_bin:
+    target: stations.waste.tip_eject
+    deprecated: true
+    confidence: medium
+    source: "AutoSpinmotorSystem/example_experiment.py:45"
+  first_glass_pick:
+    target: stations.substrate_rack.pickup
+    deprecated: true
+    confidence: high
+    source: "AutoSpinmotorSystem/config/process_coordinates.yaml"
+
+unresolved_coordinates: {}

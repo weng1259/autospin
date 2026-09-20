@@ -4,11 +4,11 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>智能旋涂仪控制台</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css?v=20260729-summary-gridfix2">
   </head>
   <body>
     <header id="global-status-bar" class="global-status-bar" aria-label="全局状态栏">
-      <div class="status-cluster">
+      <div class="status-cluster" aria-label="服务状态">
         <span class="status-item">
           <span id="service-dot" class="status-dot" aria-hidden="true"></span>
           <span id="service-status" class="status-copy">服务 等待 token</span>
@@ -29,30 +29,30 @@
         <output id="operation-elapsed" class="numeric-reading" hidden>0.0 s</output>
       </div>
 
+      <div class="header-auth">
+        <label for="token-input">访问 Token</label>
+        <input
+          id="token-input"
+          name="token"
+          type="password"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="输入 API token"
+          aria-describedby="auth-message"
+        >
+        <span id="auth-message" class="auth-message status-badge" aria-live="polite">未设置</span>
+      </div>
+
       <button id="estop-button" class="estop-button" type="button">紧急停止</button>
     </header>
 
     <main class="app-shell">
-      <div class="control-grid">
-        <section class="panel access-panel" aria-labelledby="access-heading">
-          <div class="section-heading">
-            <h1 id="access-heading">连接设置</h1>
-            <p>Token 仅保存在当前浏览器</p>
-          </div>
-          <div class="token-field">
-            <label for="token-input">访问 token（用于 API 鉴权）</label>
-            <input
-              id="token-input"
-              name="token"
-              type="password"
-              autocomplete="off"
-              spellcheck="false"
-              aria-describedby="auth-message"
-            >
-            <span id="auth-message" class="auth-message" aria-live="polite">未设置</span>
-          </div>
-        </section>
-
+      <section class="operations-overview" aria-labelledby="overview-heading">
+        <div class="overview-copy">
+          <span class="section-kicker">SYSTEM OVERVIEW</span>
+          <h1 id="overview-heading">自动实验平台控制台</h1>
+          <p>设备状态、人工控制与实验流程集中监控。执行运动前确认归零、限位和安全门状态。</p>
+        </div>
         <section class="panel estop-report-panel" aria-labelledby="estop-report-heading">
           <div class="section-heading">
             <h2 id="estop-report-heading">最近急停结果</h2>
@@ -62,7 +62,7 @@
             <p class="empty-copy">点击右上角“紧急停止”后，此处逐步显示 EstopReport。</p>
           </div>
         </section>
-      </div>
+      </section>
 
       <section class="device-section" aria-labelledby="device-heading">
         <div class="section-heading device-heading">
@@ -121,11 +121,18 @@
                 <button type="button" data-jog-axis="Z" data-jog-direction="1">Z+</button>
               </div>
               <form id="gantry-move-form" class="coordinate-form">
-                <label class="field-control">X mm<input name="x" type="number" min="-275" max="-5" step="0.1" required></label>
-                <label class="field-control">Y mm<input name="y" type="number" min="-275" max="-5" step="0.1" required></label>
-                <label class="field-control">Z mm<input name="z" type="number" min="-90" max="-5" step="0.1" required></label>
+                <label class="field-control">X mm<input name="x" type="number" data-config-range="gantry-x" step="0.1" required></label>
+                <label class="field-control">Y mm<input name="y" type="number" data-config-range="gantry-y" step="0.1" required></label>
+                <label class="field-control">Z mm<input name="z" type="number" data-config-range="gantry-z" step="0.1" required></label>
                 <button class="primary-button" type="submit">绝对移动 GO</button>
+                <button type="button" id="gantry-dry-run-button">仅校验</button>
               </form>
+              <div class="control-row">
+                <button type="button" data-operation-path="/api/gantry/homing-diagnostics" data-operation-label="归零诊断" data-operation-method="GET">归零诊断</button>
+                <button type="button" id="gantry-z-release-button">释放 Z 制动</button>
+                <button type="button" id="gantry-z-hold-button">闭合 Z 制动</button>
+                <button class="danger-outline-button" type="button" id="gantry-halt-button" data-always-enabled="true">立即停止</button>
+              </div>
             </div>
             <div class="panel-feedback">
               <output class="panel-operation numeric-reading" data-role="operation-id" hidden></output>
@@ -149,9 +156,17 @@
               <div class="reading-row"><dt>PV</dt><dd><output class="reading-value numeric-reading" data-readout="heater-pv">— ℃</output></dd></div>
               <div class="reading-row"><dt>SV</dt><dd><output class="reading-value numeric-reading" data-readout="heater-sv">— ℃</output></dd></div>
             </dl>
+            <figure class="live-chart">
+              <figcaption>
+                <span>温度趋势</span>
+                <span class="chart-legend"><i class="chart-key chart-key-primary"></i>PV <i class="chart-key chart-key-secondary"></i>SV</span>
+              </figcaption>
+              <canvas id="heater-chart" height="120" role="img" aria-label="加热台实时温度趋势，等待数据"></canvas>
+              <span class="chart-window">最近 60 个状态点</span>
+            </figure>
             <div class="control-stack">
               <form id="heater-sv-form" class="control-row">
-                <label class="field-control">SV ℃<input name="sv_c" type="number" min="0" max="150" step="0.1" required></label>
+                <label class="field-control">SV ℃<input name="sv_c" type="number" min="0" data-config-max="heater" step="0.1" required></label>
                 <button class="primary-button" type="submit">设定</button>
                 <span class="control-note">≤150 ℃，上限来自 constants.yaml</span>
               </form>
@@ -179,19 +194,43 @@
             </header>
             <dl class="reading-grid">
               <div class="reading-row"><dt>目标转速</dt><dd><output class="reading-value numeric-reading" data-readout="spincoater-rpm">— RPM</output></dd></div>
+              <div class="reading-row"><dt>旋转加速度</dt><dd><output class="reading-value numeric-reading" data-readout="spincoater-acceleration">500 RPM/s</output></dd></div>
+              <div class="reading-row"><dt>停止减速度</dt><dd><output class="reading-value numeric-reading" data-readout="spincoater-deceleration">500 RPM/s</output></dd></div>
               <div class="reading-row"><dt>运行状态</dt><dd><output class="reading-value" data-readout="spincoater-running">—</output></dd></div>
+              <div class="reading-row"><dt>真空阀 CH3</dt><dd><output class="reading-value" data-readout="spincoater-vacuum">—</output></dd></div>
               <div class="reading-row"><dt>故障位</dt><dd><output class="reading-value" data-readout="spincoater-faults">—</output></dd></div>
             </dl>
             <p class="device-note">无角度反馈，不能定向停转</p>
+            <figure class="live-chart">
+              <figcaption>
+                <span>转速趋势</span>
+                <span class="chart-legend"><i class="chart-key chart-key-primary"></i>指令 RPM</span>
+              </figcaption>
+              <canvas id="spincoater-chart" height="120" role="img" aria-label="旋涂仪实时指令转速趋势，等待数据"></canvas>
+              <span class="chart-window">当前设备无实测转速反馈 · 最近 60 个状态点</span>
+            </figure>
             <div class="control-stack">
               <form id="spincoater-start-form" class="control-row">
-                <label class="field-control">目标 RPM<input name="rpm" type="number" min="1" max="3000" step="1" required></label>
+                <label class="field-control">目标 RPM<input name="rpm" type="number" min="1" data-config-max="spincoater" step="1" required></label>
                 <button class="primary-button" type="submit">启动</button>
+              </form>
+              <form id="spincoater-acceleration-form" class="control-row">
+                <label class="field-control">加速度 RPM/s<input name="rpm_per_s" type="number" min="50" max="6000" step="50" value="500" required></label>
+                <button type="submit">设置加速度</button>
+              </form>
+              <form id="spincoater-deceleration-form" class="control-row">
+                <label class="field-control">减速度 RPM/s<input name="rpm_per_s" type="number" min="50" max="6000" step="50" value="500" required></label>
+                <button type="submit">设置减速度</button>
               </form>
               <div class="control-row">
                 <label class="checkbox-control" for="spincoater-brake"><input id="spincoater-brake" type="checkbox" checked>停止时制动</label>
                 <button id="spincoater-stop-button" class="danger-outline-button" type="button">停止</button>
                 <button type="button" data-operation-path="/api/spincoater/fault" data-operation-method="GET" data-operation-label="读取故障">读取故障</button>
+              </div>
+              <div class="control-row" aria-label="旋涂真空阀 CH3 控制">
+                <span class="control-note">吸盘真空</span>
+                <button id="spincoater-vacuum-on-button" class="primary-button" type="button">CH3 ON</button>
+                <button id="spincoater-vacuum-off-button" class="danger-outline-button" type="button">CH3 OFF</button>
               </div>
             </div>
             <div class="panel-feedback">
@@ -223,7 +262,7 @@
                 <button type="button" data-operation-path="/api/pipette/eject-tip" data-operation-label="退 Tip">退 Tip</button>
               </div>
               <form id="pipette-volume-form" class="control-row">
-                <label class="field-control">体积 µL<input name="volume_ul" type="number" min="0" max="1000" step="1" required></label>
+                <label class="field-control">体积 µL<input name="volume_ul" type="number" min="0" data-config-max="pipette" step="1" required></label>
                 <button class="primary-button" type="submit" data-volume-action="aspirate">吸</button>
                 <button type="submit" data-volume-action="dispense">排</button>
               </form>
@@ -257,7 +296,7 @@
                 <button id="linear-stage-stop-button" class="danger-outline-button" type="button" data-always-enabled="true">立即停止</button>
               </div>
               <form id="linear-stage-move-form" class="control-row">
-                <label class="field-control">绝对位置 mm<input name="position_mm" type="number" min="0" max="100" step="0.1" required></label>
+                <label class="field-control">绝对位置 mm<input name="position_mm" type="number" data-config-range="linear-stage" step="0.1" required></label>
                 <button class="primary-button" type="submit">GO</button>
               </form>
             </div>
@@ -367,6 +406,142 @@
               <p id="routine-message" class="panel-message" aria-live="polite">就绪</p>
             </div>
           </article>
+
+          <article id="builder-panel" class="panel device-card routine-card experiment-builder-card" aria-labelledby="builder-heading">
+            <header class="device-card-header builder-header">
+              <div class="device-identity">
+                <h3 id="builder-heading">实验构建器</h3>
+                <p>按参数组生成多轮实验；每组默认重复 4 轮，工位坐标自动使用系统配置。</p>
+              </div>
+              <span class="panel-transport">两阶段旋涂</span>
+            </header>
+            <form id="experiment-builder-form" class="builder-grid">
+              <section class="builder-basics" aria-labelledby="builder-basics-heading">
+                <div class="builder-section-heading">
+                  <div>
+                    <h4 id="builder-basics-heading">实验信息</h4>
+                    <p>名称可自定义，生成位置沿用默认工位，无需在此编辑坐标。</p>
+                  </div>
+                  <div class="builder-total">
+                    <span>总轮数（自动计算）</span>
+                    <output id="builder-total-rounds" class="numeric-reading">4</output>
+                  </div>
+                </div>
+                <div class="builder-basics-grid">
+                  <label class="field-control">实验名称
+                    <input name="experiment_name" type="text" maxlength="120" value="perovskite_experiment" autocomplete="off" required>
+                  </label>
+                  <label class="field-control">输出文件名
+                    <input name="output_name" type="text" maxlength="160" value="perovskite_experiment.json" required>
+                  </label>
+                </div>
+              </section>
+
+              <section class="builder-groups-section" aria-labelledby="builder-groups-heading">
+                <div class="builder-section-heading">
+                  <div>
+                    <h4 id="builder-groups-heading">参数组</h4>
+                    <p>同组参数保持一致；默认重复 4 轮，可添加参数不同的新组。</p>
+                  </div>
+                  <button id="builder-add-group" type="button">添加参数组</button>
+                </div>
+                <div id="builder-groups" class="builder-groups"></div>
+              </section>
+
+              <div class="builder-actions">
+                <span class="control-note">反溶剂时机按第二阶段开始计时，r = 滴加延迟 ÷ 第二阶段时间。</span>
+                <div class="control-row">
+                  <button type="button" id="builder-preview-button">Dry-run 预览</button>
+                  <button class="primary-button" type="submit">生成并保存多轮 recipe</button>
+                  <button type="button" id="builder-run-dry-button" disabled>运行已保存 recipe（Dry-run）</button>
+                  <button class="danger-outline-button" type="button" id="builder-run-real-button" disabled>正式运行已保存 recipe</button>
+                </div>
+              </div>
+            </form>
+            <template id="builder-group-template">
+              <article class="builder-group-card">
+                <header class="builder-group-header">
+                  <div>
+                    <span class="builder-group-kicker">重复实验</span>
+                    <h5 data-group-title>参数组</h5>
+                  </div>
+                  <div class="builder-group-repeat">
+                    <span>重复轮数</span>
+                    <output data-group-repeat-summary class="numeric-reading">4</output>
+                  </div>
+                  <button type="button" class="builder-remove-group danger-outline-button">移除</button>
+                </header>
+                <div class="builder-group-meta">
+                  <label class="field-control">参数组名称
+                    <input data-group-field="name" type="text" maxlength="80" required>
+                  </label>
+                  <label class="field-control">重复轮数
+                    <input data-group-field="repeats" type="number" min="1" max="100" step="1" required>
+                  </label>
+                </div>
+                <div class="builder-parameter-sections">
+                  <fieldset class="builder-parameter-section">
+                    <legend>旋涂参数</legend>
+                    <div class="builder-group-grid">
+                      <label class="field-control">第一阶段速度 <span class="field-unit">RPM</span>
+                        <input data-group-field="stage_1_speed_rpm" type="number" min="1" max="6000" step="1" required>
+                      </label>
+                      <label class="field-control">第一阶段时间 <span class="field-unit">s</span>
+                        <input data-group-field="stage_1_time_s" type="number" min="0.1" step="0.1" required>
+                      </label>
+                      <label class="field-control">第二阶段速度 <span class="field-unit">RPM</span>
+                        <input data-group-field="stage_2_speed_rpm" type="number" min="1" max="6000" step="1" required>
+                      </label>
+                      <label class="field-control">第二阶段时间 <span class="field-unit">s</span>
+                        <input data-group-field="stage_2_time_s" type="number" min="0.1" step="0.1" required>
+                      </label>
+                    </div>
+                  </fieldset>
+                  <fieldset class="builder-parameter-section">
+                    <legend>液体处理</legend>
+                    <div class="builder-group-grid">
+                      <label class="field-control">前驱体吸液量 <span class="field-unit">µL</span>
+                        <input data-group-field="precursor_volume_ul" type="number" min="0.1" step="0.1" required>
+                      </label>
+                      <label class="field-control builder-checkbox-control">
+                        <span>使用反溶剂（第二次取枪头、吸液和定时滴加）</span>
+                        <input data-group-field="use_antisolvent" type="checkbox" checked>
+                      </label>
+                      <label class="field-control">反溶剂吸液量 <span class="field-unit">µL</span>
+                        <input data-group-field="antisolvent_volume_ul" type="number" min="0.1" step="0.1" required>
+                      </label>
+                      <label class="field-control">第二阶段后滴加 <span class="field-unit">s</span>
+                        <input data-group-field="antisolvent_delay_stage_2_s" type="number" min="0" step="0.1" required>
+                      </label>
+                      <label class="field-control">滴加占比 r
+                        <output class="builder-ratio numeric-reading" data-group-ratio>0.50</output>
+                      </label>
+                      <label class="field-control">Tip 高度 <span class="field-unit">mm</span>
+                        <input data-group-field="tip_height_mm" type="number" min="0.1" step="0.1" required>
+                      </label>
+                    </div>
+                  </fieldset>
+                  <fieldset class="builder-parameter-section">
+                    <legend>热处理</legend>
+                    <div class="builder-group-grid">
+                      <label class="field-control">热台温度 <span class="field-unit">°C</span>
+                        <input data-group-field="annealing_temperature_c" type="number" min="0" step="0.1" required>
+                      </label>
+                      <label class="field-control">退火时间 <span class="field-unit">s</span>
+                        <input data-group-field="annealing_time_s" type="number" min="0" step="1" required>
+                      </label>
+                    </div>
+                  </fieldset>
+                </div>
+              </article>
+            </template>
+            <div id="builder-summary" class="builder-summary" aria-live="polite">
+              <p class="empty-copy">设置参数组后可预览总轮数、各组范围和展开动作。</p>
+            </div>
+            <div class="panel-feedback">
+              <p id="builder-message" class="panel-message" aria-live="polite">就绪</p>
+            </div>
+          </article>
         </div>
       </section>
 
@@ -381,6 +556,6 @@
       </section>
     </main>
 
-    <script type="module" src="/static/app.js"></script>
+    <script type="module" src="/static/app.js?v=20260729-spin-accel1"></script>
   </body>
 </html>

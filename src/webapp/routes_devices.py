@@ -50,6 +50,18 @@ class SpinStartRequest(IdempotencyRequest):
     rpm: float = Field(allow_inf_nan=False)
 
 
+class SpinAccelerationRequest(IdempotencyRequest):
+    """旋涂软件加速度设置请求，单位 RPM/s。"""
+
+    rpm_per_s: float = Field(ge=50.0, le=6000.0, allow_inf_nan=False)
+
+
+class SpinDecelerationRequest(IdempotencyRequest):
+    """旋涂软件减速度设置请求，单位 RPM/s。"""
+
+    rpm_per_s: float = Field(ge=50.0, le=6000.0, allow_inf_nan=False)
+
+
 class SpinStopRequest(IdempotencyRequest):
     """旋涂停止请求；默认使用制动。"""
 
@@ -73,6 +85,7 @@ class RelayChannelRequest(IdempotencyRequest):
 
     channel: int = Field(ge=3, le=8)
     on: bool
+    force: bool = False
 
 
 class AcceptedOperation(BaseModel):
@@ -297,6 +310,40 @@ def register_device_routes(
                     request.rpm,
                     idempotency_key=_idempotency_key(request, operation),
                 ),
+            )
+        )
+
+    @app.post(
+        "/api/spincoater/acceleration",
+        status_code=202,
+        response_model=AcceptedOperation,
+    )
+    def spincoater_acceleration(
+        request: SpinAccelerationRequest,
+    ) -> AcceptedOperation:
+        spincoater = _get_spincoater(registry)
+        return _accepted(
+            gate.submit(
+                "spincoater",
+                "set-acceleration",
+                lambda _: spincoater.set_acceleration(request.rpm_per_s),
+            )
+        )
+
+    @app.post(
+        "/api/spincoater/deceleration",
+        status_code=202,
+        response_model=AcceptedOperation,
+    )
+    def spincoater_deceleration(
+        request: SpinDecelerationRequest,
+    ) -> AcceptedOperation:
+        spincoater = _get_spincoater(registry)
+        return _accepted(
+            gate.submit(
+                "spincoater",
+                "set-deceleration",
+                lambda _: spincoater.set_deceleration(request.rpm_per_s),
             )
         )
 
@@ -566,6 +613,14 @@ def register_device_routes(
 
         def set_channel(operation: Operation) -> object:
             idempotency_key = _idempotency_key(request, operation)
+            if request.force:
+                if not relay.is_connected():
+                    relay.connect()
+                return relay.force_set(
+                    request.channel,
+                    request.on,
+                    idempotency_key=idempotency_key,
+                )
             if request.on:
                 return relay.ch_on(
                     request.channel,

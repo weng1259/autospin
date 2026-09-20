@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "description": "Files required by the standalone Raspberry Pi runtime package.",
+  "include": [
+    "constants.yaml",
+    "requirements.txt",
+    "config",
+    "recipes",
+    "src",
+    "tools/run_webserver.py",
+    "deploy/udev"
+  ],
+  "excluded_top_level": [
+    "autospin_system",
+    "firmware",
+    "hardware",
+    "migration_snapshot",
+    "tests"
+  ]
+}

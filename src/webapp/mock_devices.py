@@ -15,7 +15,12 @@ from ..hardware.linearstage_backend import (
     LinearStageStatus,
 )
 from ..hardware.pipette_backend import PipetteActionResult, PipetteStatus
-from ..hardware.spincoater_backend import SpinActionResult, SpinStatus
+from ..hardware.spincoater_backend import (
+    SpinAccelerationResult,
+    SpinDecelerationResult,
+    SpinActionResult,
+    SpinStatus,
+)
 from ..hardware.types import (
     GrblSettingsSnapshot,
     GrblSettingsValidationResult,
@@ -248,6 +253,17 @@ class MockRelay:
         del idempotency_key
         return self._set_channel(channel, target=False, dry_run=dry_run)
 
+    def force_set(
+        self,
+        channel: int,
+        on: bool,
+        *,
+        idempotency_key: str,
+        dry_run: bool = False,
+    ) -> RelayActionResult | RelayActionPlan:
+        del idempotency_key
+        return self._set_channel(channel, target=on, dry_run=dry_run)
+
     def _set_channel(
         self,
         channel: int,
@@ -307,6 +323,14 @@ class MockGripper:
     ) -> GripperActionResult | GripperActionPlan:
         del idempotency_key
         return self._set_state(GripperCommandedState.CLOSED, dry_run=dry_run)
+
+    def stop(self) -> GripperState:
+        return self.get_state()
+
+    def emergency_release(self) -> GripperActionResult:
+        result = self._set_state(GripperCommandedState.OPEN, dry_run=False)
+        assert isinstance(result, GripperActionResult)
+        return result
 
     def _set_state(
         self,
@@ -382,6 +406,46 @@ class MockHeater:
             last_update_ms_ago=(0.0 if self._timestamp is not None else None),
         )
 
+    def wait_until_stable(
+        self,
+        *,
+        target_c: float,
+        tolerance_c: float = 1.0,
+        **_: object,
+    ):
+        from ..hardware.heater_backend import HeaterStabilityResult
+
+        pv = self._pv_c
+        return HeaterStabilityResult(
+            success=pv is not None and abs(pv - target_c) <= tolerance_c,
+            target_c=target_c,
+            pv_c=pv,
+            tolerance_c=tolerance_c,
+            stable_samples=3,
+            elapsed_ms=0.0,
+            timed_out=False,
+        )
+
+    def wait_until_at_least(
+        self,
+        *,
+        minimum_c: float,
+        target_c: float,
+        **_: object,
+    ):
+        from ..hardware.heater_backend import HeaterStabilityResult
+
+        pv = self._pv_c
+        return HeaterStabilityResult(
+            success=pv is not None and pv >= minimum_c,
+            target_c=target_c,
+            pv_c=pv,
+            tolerance_c=target_c - minimum_c,
+            stable_samples=1,
+            elapsed_ms=0.0,
+            timed_out=False,
+        )
+
 
 class MockSpincoater:
     """立即启动或停止、无故障的旋涂模型。"""
@@ -390,6 +454,8 @@ class MockSpincoater:
         self._connected = False
         self._running = False
         self._target_rpm: float | None = None
+        self._acceleration_rpm_per_s = 500.0
+        self._deceleration_rpm_per_s = 500.0
         self._brake_engaged: bool | None = None
         self._fault_register: int | None = None
         self._timestamp: datetime | None = None
@@ -427,14 +493,35 @@ class MockSpincoater:
             event_id=_event_id("spincoater.start"),
         )
 
+    def set_acceleration(self, rpm_per_s: float) -> SpinAccelerationResult:
+        self._acceleration_rpm_per_s = float(rpm_per_s)
+        return SpinAccelerationResult(
+            success=True,
+            acceleration_rpm_per_s=self._acceleration_rpm_per_s,
+            action_description="Set mock software spin acceleration",
+            duration_ms=0.0,
+            event_id=_event_id("spincoater.set_acceleration"),
+        )
+
+    def set_deceleration(self, rpm_per_s: float) -> SpinDecelerationResult:
+        self._deceleration_rpm_per_s = float(rpm_per_s)
+        return SpinDecelerationResult(
+            success=True,
+            deceleration_rpm_per_s=self._deceleration_rpm_per_s,
+            action_description="Set mock software spin deceleration",
+            duration_ms=0.0,
+            event_id=_event_id("spincoater.set_deceleration"),
+        )
+
     def stop(
         self,
         *,
         use_brake: bool = True,
         idempotency_key: str | None = None,
         dry_run: bool = False,
+        ramp_down: bool = True,
     ) -> SpinActionResult:
-        del idempotency_key
+        del idempotency_key, ramp_down
         if not dry_run:
             self._running = False
             self._target_rpm = 0.0
@@ -460,6 +547,8 @@ class MockSpincoater:
         return SpinStatus(
             connected=self._connected,
             running=self._running,
+            acceleration_rpm_per_s=self._acceleration_rpm_per_s,
+            deceleration_rpm_per_s=self._deceleration_rpm_per_s,
             target_rpm=self._target_rpm,
             brake_engaged=self._brake_engaged,
             fault_register=self._fault_register,
@@ -578,6 +667,14 @@ class MockPipette:
             last_update_ms_ago=(0.0 if self._timestamp is not None else None),
         )
 
+    def get_status(self) -> PipetteStatus:
+        return self.status()
+
+    def refresh_status(self) -> PipetteStatus:
+        self._tip_present = True
+        self._timestamp = _now()
+        return self.status()
+
     def _action_result(
         self,
         action: PipetteAction,
@@ -646,8 +743,9 @@ class MockLinearStage:
         *,
         idempotency_key: str | None = None,
         dry_run: bool = False,
+        position_tolerance_mm: float | None = None,
     ) -> LinearStageActionResult:
-        del idempotency_key
+        del idempotency_key, position_tolerance_mm
         if not dry_run:
             self._moving = False
             self._position_mm = position_mm

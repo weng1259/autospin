@@ -7,9 +7,9 @@
   的顺序是事故路径，这里反过来。
 - **每步独立隔离**：一台设备失联/抛错，绝不能挡住后面设备的急停；
   所有异常收进报告，最后一起看。
-- **不碰夹爪与通用继电器通道**：急停时夹爪可能正夹着样品，断电=掉样品
-  （测试版 `RelayManager.connect()` 全通道 OFF 的教训）。Z 刹车时序由
-  `GantryBackend.abort_motion_immediate()` 自己管（停止后锁回）。
+- **夹爪明确释放**：在 Gantry 停止后，通过 GripperBackend 请求 CH1 OFF；
+  不绕过 RelayBackend，也不执行通用继电器 all-off。Z 刹车时序仍由
+  `GantryBackend.abort_motion_immediate()` 自己管理（停止后锁回）。
 - **无幂等缓存、无 dry_run**：急停永远真执行。
 - **本模块不持有总线锁**：各 backend 自己走 `Rs485Bus.transaction()`；
   gantry 的 `abort_motion_immediate` 设计为不等 grbl 串口锁。
@@ -29,6 +29,7 @@ from pydantic import BaseModel, Field
 
 from .hardware.errors import L3Error
 from .hardware.gantry_backend import GantryBackend
+from .hardware.gripper_backend import GripperBackend
 from .hardware.heater_backend import HeaterBackend
 from .hardware.linearstage_backend import LinearStageBackend
 from .hardware.pipette_backend import PipetteBackend
@@ -63,12 +64,14 @@ class SystemEstop:
         self,
         *,
         gantry: Optional[GantryBackend] = None,
+        gripper: Optional[GripperBackend] = None,
         spincoater: Optional[SpincoaterBackend] = None,
         linear_stage: Optional[LinearStageBackend] = None,
         pipette: Optional[PipetteBackend] = None,
         heater: Optional[HeaterBackend] = None,
     ) -> None:
         self._gantry = gantry
+        self._gripper = gripper
         self._spincoater = spincoater
         self._linear_stage = linear_stage
         self._pipette = pipette
@@ -103,6 +106,7 @@ class SystemEstop:
             steps.append(EstopStepReport(device=device, action=action, ok=True))
 
         gantry = self._gantry
+        gripper = self._gripper
         spincoater = self._spincoater
         linear_stage = self._linear_stage
         pipette = self._pipette
@@ -114,21 +118,27 @@ class SystemEstop:
             "abort_motion_immediate",
             None if gantry is None else gantry.abort_motion_immediate,
         )
-        # 2) 旋涂：带刹车停转。
+        # 2) 夹爪：经共享 RelayBackend 释放（CH1 OFF）。
+        run(
+            "gripper",
+            "emergency_release",
+            None if gripper is None else gripper.emergency_release,
+        )
+        # 3) 旋涂：带刹车停转。
         run(
             "spincoater",
             "stop(use_brake=True)",
             None
             if spincoater is None
-            else (lambda: spincoater.stop(use_brake=True)),
+            else (lambda: spincoater.stop(use_brake=True, ramp_down=False)),
         )
-        # 3) 滑台：立即停。
+        # 4) 滑台：立即停。
         run(
             "linear_stage",
             "stop",
             None if linear_stage is None else linear_stage.stop,
         )
-        # 4) 移液：IMM_STOP。
+        # 5) 移液：IMM_STOP。
         run("pipette", "stop", None if pipette is None else pipette.stop)
         # 5) 热源最后：SV 归零（运动都停稳了才轮到慢变量）。
         if stop_heater:

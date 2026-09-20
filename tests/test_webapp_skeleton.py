@@ -1,6 +1,8 @@
 """W3.0 Web 服务骨架：全测试只使用空 mock 注册表。"""
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 import pytest
 
@@ -158,6 +160,21 @@ def test_registry_mock_constructor_has_no_real_backends() -> None:
     assert isinstance(registry.estop, SystemEstop)
 
 
-def test_registry_real_constructor_is_an_explicit_placeholder() -> None:
-    with pytest.raises(NotImplementedError):
-        DeviceRegistry.from_config()
+def test_registry_real_constructor_is_available(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import src.config as config_mod
+    from tests.test_config_wiring import CONFIG_TEXT
+
+    config_path = tmp_path / "constants.yaml"
+    config_path.write_text(
+        CONFIG_TEXT.replace("mock: false", "mock: true"),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(config_mod, "DEFAULT_CONFIG_PATH", config_path)
+    monkeypatch.setattr(config_mod, "_CONFIG", None)
+
+    registry = DeviceRegistry.from_config()
+
+    assert isinstance(registry, DeviceRegistry)

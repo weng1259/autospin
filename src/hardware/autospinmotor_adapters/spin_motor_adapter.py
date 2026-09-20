@@ -56,25 +56,35 @@ class SpinMotorControllerAdapter:
         port: str,
         mock: bool = False,
         bus: Rs485Bus | None = None,
+        slave_id: int = 2,
         baudrate: int = 9600,
         timeout_s: float = 2.0,
         max_rpm: float = 3000.0,
+        pole_pairs: int = 4,
     ) -> SpinMotorControllerAdapter:
         """Construct from the bundled verified AutoSpinmotorSystem controller."""
         try:
-            from autospin_system.hardware.spin_motor.motor_controller import (
+            from ..drivers.spin_motor.motor_controller import (
                 MotorController,
             )
         except ImportError as exc:
             raise SpincoaterCommunicationError(
                 human_message="无法导入已验证的旋涂电机 MotorController",
                 agent_message=(
-                    "Could not import autospin_system.hardware.spin_motor."
+                    "Could not import src.hardware.drivers.spin_motor."
                     f"motor_controller.MotorController: {exc!r}."
                 ),
             ) from exc
 
-        controller = MotorController(port=port, mock=mock)
+        controller = MotorController(
+            port=port,
+            mock=mock,
+            slave_id=slave_id,
+            baudrate=baudrate,
+            timeout=timeout_s,
+            max_rpm=int(max_rpm),
+            pole_pairs=pole_pairs,
+        )
         return cls(
             controller,
             bus=bus,
@@ -224,6 +234,24 @@ class SpinMotorControllerAdapter:
             duration_ms=(time.monotonic() - started) * 1000.0,
             event_id="",
         )
+
+    def set_speed(self, rpm: float) -> None:
+        """Write an intermediate software-ramp speed through the verified controller."""
+        if not math.isfinite(rpm) or not 0.0 <= rpm <= self._max_rpm:
+            raise SpincoaterRpmOutOfRangeError(
+                human_message=f"旋涂速度 {rpm!r} RPM 超出范围",
+                agent_message=f"Ramp speed must be in [0, {self._max_rpm:g}], got {rpm!r}.",
+            )
+        with self._guard():
+            try:
+                ok, message = self._controller.set_speed(rpm)
+            except Exception as exc:
+                raise self._communication_error("set_speed", exc) from exc
+        if not ok:
+            raise SpincoaterCommunicationError(
+                human_message="旋涂电机斜坡设速失败",
+                agent_message=f"MotorController.set_speed({rpm}) returned False: {message}",
+            )
 
     def status(self) -> SpinStatus:
         try:

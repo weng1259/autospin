@@ -1,0 +1,48 @@
+# Logical registration, identity, provenance and backend selection only.
+# Physical communication and operational parameters live in hardware.yaml.
+devices:
+  spincoater:
+    enabled: true
+    backend: "direct"
+    model: "DBLS400"
+    protocol: "Modbus RTU with device-specific word byte order"
+    source: "AutoSpinmotorSystem/hardware/spin_motor/"
+  heater:
+    enabled: true
+    backend: "direct"
+    model: "AI-516 D2 G S"
+    protocol: "Modbus RTU"
+    source: "AutoSpinmotorSystem/hardware/heating_stage/"
+  pipette:
+    enabled: true
+    backend: "direct"
+    model: "28 series 1k"
+    protocol: "Modbus RTU"
+    source: "AutoSpinmotorSystem/hardware/pipette/"
+  linear_stage:
+    enabled: true
+    backend: "direct"
+    model: "ZDT Emm"
+    protocol: "zdt_emm_fixed_6b"
+    source: "AutoSpinmotorSystem/hardware/linear_stage/"
+  relay:
+    enabled: true
+    backend: "relay"
+    model: "LCUS-8"
+    protocol: "A0 channel state checksum"
+    source: "AutoSpinmotorSystem/hardware/relay/"
+  gantry:
+    enabled: true
+    backend: "verified_driver"
+    driver: "grbl_controller"
+    model: "grbl-Mega-5X"
+    protocol: "GRBL"
+    source: "AutoSpinmotorSystem/hardware/xyz_stage/"
+    migration_status: "code_migrated_hardware_unverified"
+  gripper:
+    enabled: true
+    backend: "relay"
+    model: "IO-controlled gripper"
+    protocol: "DSTUR-T80 relay IO"
+    source: "AutoSpinmotorSystem/hardware/xyz_stage/l3_backend/hardware/gripper_backend.py"
+    migration_status: "code_migrated_hardware_unverified"

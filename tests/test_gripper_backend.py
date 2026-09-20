@@ -34,6 +34,12 @@ def _clear_idem_cache() -> None:
     observable_mod._IDEM_CACHE.clear()
 
 
+@pytest.fixture(autouse=True)
+def _avoid_real_gripper_settle_wait() -> None:
+    with patch("src.hardware.gripper_backend.time.sleep"):
+        yield
+
+
 @pytest.fixture
 def relay_with_mock_serial() -> RelayBackend:
     """预连接好的 RelayBackend，内部 serial 是 MagicMock。"""
@@ -237,3 +243,37 @@ def test_observable_cache_short_circuits_relay(
     result2 = gripper.close(idempotency_key="obs-cache-key")
     assert result2.event_id == result1.event_id
     mock_ser.write.assert_not_called()
+
+
+def test_close_waits_for_configured_stabilization() -> None:
+    relay = MagicMock(spec=RelayBackend)
+    gripper = GripperBackend(relay, close_wait_s=1.0)
+
+    with patch("src.hardware.gripper_backend.time.sleep") as sleep:
+        gripper.close(idempotency_key="close-wait")
+
+    relay.ch_on.assert_called_once()
+    sleep.assert_called_once_with(1.0)
+
+
+def test_stop_preserves_output_and_returns_state() -> None:
+    relay = MagicMock(spec=RelayBackend)
+    gripper = GripperBackend(relay, close_wait_s=0.0)
+
+    state = gripper.stop()
+
+    assert state.commanded_state == GripperCommandedState.UNKNOWN
+    relay.ch_on.assert_not_called()
+    relay.ch_off.assert_not_called()
+
+
+def test_emergency_release_uses_relay_off_and_updates_state() -> None:
+    relay = MagicMock(spec=RelayBackend)
+    gripper = GripperBackend(relay, close_wait_s=0.0)
+
+    result = gripper.emergency_release()
+
+    relay.ch_off.assert_called_once()
+    assert relay.ch_off.call_args.args == (1,)
+    assert result.commanded_state_after == GripperCommandedState.OPEN
+    assert gripper.get_state().position_known is False

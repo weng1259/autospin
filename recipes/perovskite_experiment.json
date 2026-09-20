@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "template": "perovskite_basic",
+  "experiment_name": "perovskite_experiment",
+  "rounds": 4,
+  "parameter_groups": [
+    {
+      "name": "default",
+      "repeats": 4,
+      "precursor_volume_ul": 100.0,
+      "use_antisolvent": true,
+      "antisolvent_volume_ul": 50.0,
+      "annealing_temperature_c": 120.0,
+      "stage_1_speed_rpm": 1500.0,
+      "stage_1_time_s": 10.0,
+      "stage_2_speed_rpm": 5000.0,
+      "stage_2_time_s": 20.0,
+      "antisolvent_delay_stage_2_s": 10.0,
+      "tip_height_mm": 10.0,
+      "annealing_time_s": 480.0
+    }
+  ]
+}

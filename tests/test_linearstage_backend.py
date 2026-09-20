@@ -43,6 +43,15 @@ RESET_PROTECTION_FRAME = bytes.fromhex("04 0E 52 6B")
 MOVE_TO_10_FROM_ZERO_FRAME = bytes.fromhex(
     "04 FD 00 07 D0 96 00 00 3E 80 00 00 6B"
 )
+MOVE_BACK_10_TO_ZERO_FRAME = bytes.fromhex(
+    "04 FD 01 07 D0 96 00 00 3E 80 00 00 6B"
+)
+MOVE_FORWARD_40_FRAME = bytes.fromhex(
+    "04 FD 00 07 D0 96 00 00 FA 00 00 00 6B"
+)
+MOVE_FORWARD_80_FRAME = bytes.fromhex(
+    "04 FD 00 07 D0 96 00 01 F4 00 00 00 6B"
+)
 STOP_FRAME = bytes.fromhex("04 FE 98 00 6B")
 
 FLAGS_DISABLED_IN_POSITION_RESPONSE = bytes.fromhex("04 3A 02 6B")
@@ -50,6 +59,10 @@ FLAGS_READY_RESPONSE = bytes.fromhex("04 3A 03 6B")
 FLAGS_STALLED_RESPONSE = bytes.fromhex("04 3A 07 6B")
 POSITION_ZERO_RESPONSE = bytes.fromhex("04 36 00 00 00 00 00 6B")
 POSITION_TEN_RESPONSE = bytes.fromhex("04 36 00 00 05 00 00 6B")
+POSITION_TEN_POINT_625_RESPONSE = bytes.fromhex("04 36 00 00 05 50 00 6B")
+POSITION_EIGHT_POINT_FIVE_RESPONSE = bytes.fromhex("04 36 00 00 04 40 00 6B")
+POSITION_FORTY_RESPONSE = bytes.fromhex("04 36 00 00 14 00 00 6B")
+POSITION_EIGHTY_RESPONSE = bytes.fromhex("04 36 00 00 28 00 00 6B")
 HOME_CONFIG_ACK = bytes.fromhex("04 4C 02 6B")
 MOVE_ACK = bytes.fromhex("04 FD 02 6B")
 HOME_ACTIVE_RESPONSE = bytes.fromhex("04 3B 04 6B")
@@ -245,7 +258,17 @@ def test_move_frame_waits_for_position_and_flags_in_separate_transactions() -> N
     fake_bus = FakeBus(
         _connect_responses()
         + _home_responses()
-        + [FLAGS_READY_RESPONSE, MOVE_ACK, POSITION_TEN_RESPONSE, FLAGS_READY_RESPONSE]
+        + [
+            POSITION_ZERO_RESPONSE,
+            FLAGS_READY_RESPONSE,
+            MOVE_ACK,
+            POSITION_TEN_RESPONSE,
+            FLAGS_READY_RESPONSE,
+            POSITION_TEN_RESPONSE,
+            FLAGS_READY_RESPONSE,
+            POSITION_TEN_RESPONSE,
+            FLAGS_READY_RESPONSE,
+        ]
     )
     backend = _backend(fake_bus)
     _connect_and_home(backend, key="linear-home-before-move-frame")
@@ -254,9 +277,14 @@ def test_move_frame_waits_for_position_and_flags_in_separate_transactions() -> N
     result = backend.move_to(10.0, idempotency_key="linear-move-reference-frame")
 
     assert fake_bus.serial.writes[writes_before_move:] == [
+        POSITION_QUERY,
         ENABLE_FRAME,
         FLAGS_QUERY,
         MOVE_TO_10_FROM_ZERO_FRAME,
+        POSITION_QUERY,
+        FLAGS_QUERY,
+        POSITION_QUERY,
+        FLAGS_QUERY,
         POSITION_QUERY,
         FLAGS_QUERY,
     ]
@@ -266,6 +294,132 @@ def test_move_frame_waits_for_position_and_flags_in_separate_transactions() -> N
     assert result.final_position_mm == 10.0
     assert result.success is True
     assert backend.status().position_mm == 10.0
+
+
+def test_move_accepts_observed_point_625_mm_offset_with_point_seven_tolerance() -> None:
+    fake_bus = FakeBus(
+        _connect_responses()
+        + _home_responses()
+        + [
+            POSITION_ZERO_RESPONSE,
+            FLAGS_READY_RESPONSE,
+            MOVE_ACK,
+            POSITION_TEN_POINT_625_RESPONSE,
+            FLAGS_READY_RESPONSE,
+            POSITION_TEN_POINT_625_RESPONSE,
+            FLAGS_READY_RESPONSE,
+            POSITION_TEN_POINT_625_RESPONSE,
+            FLAGS_READY_RESPONSE,
+        ]
+    )
+    backend = _backend(fake_bus)
+    _connect_and_home(backend, key="linear-home-before-tolerance-boundary")
+
+    result = backend.move_to(10.0, idempotency_key="linear-move-tolerance-boundary")
+
+    assert result.success is True
+    assert result.target_position_mm == 10.0
+    assert result.final_position_mm == 10.625
+    assert backend.status().moving is False
+
+
+def test_move_supports_explicit_contact_tolerance() -> None:
+    fake_bus = FakeBus(
+        _connect_responses()
+        + _home_responses()
+        + [
+            POSITION_ZERO_RESPONSE,
+            FLAGS_READY_RESPONSE,
+            MOVE_ACK,
+            POSITION_EIGHT_POINT_FIVE_RESPONSE,
+            FLAGS_READY_RESPONSE,
+            POSITION_EIGHT_POINT_FIVE_RESPONSE,
+            FLAGS_READY_RESPONSE,
+            POSITION_EIGHT_POINT_FIVE_RESPONSE,
+            FLAGS_READY_RESPONSE,
+        ]
+    )
+    backend = _backend(fake_bus)
+    _connect_and_home(backend, key="linear-home-before-contact-move")
+
+    result = backend.move_to(
+        10.0,
+        idempotency_key="linear-contact-move",
+        position_tolerance_mm=2.0,
+    )
+
+    assert result.success is True
+    assert result.target_position_mm == 10.0
+    assert result.final_position_mm == 8.5
+
+
+def test_native_backend_sends_one_direct_move_over_50_mm() -> None:
+    fake_bus = FakeBus(
+        _connect_responses()
+        + _home_responses()
+        + [
+            POSITION_ZERO_RESPONSE,
+            FLAGS_READY_RESPONSE,
+            MOVE_ACK,
+            POSITION_EIGHTY_RESPONSE,
+            FLAGS_READY_RESPONSE,
+            POSITION_EIGHTY_RESPONSE,
+            FLAGS_READY_RESPONSE,
+            POSITION_EIGHTY_RESPONSE,
+            FLAGS_READY_RESPONSE,
+        ]
+    )
+    backend = _backend(fake_bus)
+    _connect_and_home(backend, key="linear-home-before-native-direct-move")
+
+    result = backend.move_to(80.0, idempotency_key="linear-native-direct-0-to-80")
+
+    assert fake_bus.serial.writes.count(MOVE_FORWARD_80_FRAME) == 1
+    assert MOVE_FORWARD_40_FRAME not in fake_bus.serial.writes
+    assert result.target_position_mm == 80.0
+    assert result.final_position_mm == 80.0
+    assert result.success is True
+
+
+def test_next_absolute_move_uses_legacy_commanded_origin_not_encoder_undershoot() -> None:
+    fake_bus = FakeBus(
+        _connect_responses()
+        + _home_responses()
+        + [
+            # Command 0 -> 10, but observe the known 1.5 mm undershoot.
+            POSITION_ZERO_RESPONSE,
+            FLAGS_READY_RESPONSE,
+            MOVE_ACK,
+            POSITION_EIGHT_POINT_FIVE_RESPONSE,
+            FLAGS_READY_RESPONSE,
+            POSITION_EIGHT_POINT_FIVE_RESPONSE,
+            FLAGS_READY_RESPONSE,
+            POSITION_EIGHT_POINT_FIVE_RESPONSE,
+            FLAGS_READY_RESPONSE,
+            # The return must still command nominal 10 -> 0, as the legacy
+            # relative Emm driver did, rather than observed 8.5 -> 0.
+            POSITION_EIGHT_POINT_FIVE_RESPONSE,
+            FLAGS_READY_RESPONSE,
+            MOVE_ACK,
+            POSITION_ZERO_RESPONSE,
+            FLAGS_READY_RESPONSE,
+            POSITION_ZERO_RESPONSE,
+            FLAGS_READY_RESPONSE,
+            POSITION_ZERO_RESPONSE,
+            FLAGS_READY_RESPONSE,
+        ]
+    )
+    backend = _backend(fake_bus)
+    _connect_and_home(backend, key="linear-home-before-commanded-origin")
+
+    backend.move_to(
+        10.0,
+        idempotency_key="linear-commanded-origin-out",
+        position_tolerance_mm=2.0,
+    )
+    backend.move_to(0.0, idempotency_key="linear-commanded-origin-return")
+
+    assert MOVE_BACK_10_TO_ZERO_FRAME in fake_bus.serial.writes
 
 
 def test_stop_frame_matches_reference_and_has_no_idempotency_cache() -> None:
@@ -345,7 +499,9 @@ def test_move_timeout_sends_stop_as_last_frame_and_raises_structured_error() -> 
         return FLAGS_READY_RESPONSE
 
     fake_bus = FakeBus(
-        _connect_responses() + _home_responses() + [FLAGS_READY_RESPONSE, MOVE_ACK],
+        _connect_responses()
+        + _home_responses()
+        + [POSITION_ZERO_RESPONSE, FLAGS_READY_RESPONSE, MOVE_ACK],
         response_factory=response_factory,
     )
     backend = _backend(fake_bus, move_timeout_s=0.003)
@@ -364,7 +520,13 @@ def test_move_stall_flag_sends_stop_last_and_raises_decoded_fault() -> None:
     fake_bus = FakeBus(
         _connect_responses()
         + _home_responses()
-        + [FLAGS_READY_RESPONSE, MOVE_ACK, POSITION_ZERO_RESPONSE, FLAGS_STALLED_RESPONSE]
+        + [
+            POSITION_ZERO_RESPONSE,
+            FLAGS_READY_RESPONSE,
+            MOVE_ACK,
+            POSITION_ZERO_RESPONSE,
+            FLAGS_STALLED_RESPONSE,
+        ]
     )
     backend = _backend(fake_bus)
     _connect_and_home(backend, key="linear-home-before-stall")
@@ -396,7 +558,17 @@ def test_same_idempotency_key_sends_move_command_only_once() -> None:
     fake_bus = FakeBus(
         _connect_responses()
         + _home_responses()
-        + [FLAGS_READY_RESPONSE, MOVE_ACK, POSITION_TEN_RESPONSE, FLAGS_READY_RESPONSE]
+        + [
+            POSITION_ZERO_RESPONSE,
+            FLAGS_READY_RESPONSE,
+            MOVE_ACK,
+            POSITION_TEN_RESPONSE,
+            FLAGS_READY_RESPONSE,
+            POSITION_TEN_RESPONSE,
+            FLAGS_READY_RESPONSE,
+            POSITION_TEN_RESPONSE,
+            FLAGS_READY_RESPONSE,
+        ]
     )
     backend = _backend(fake_bus)
     _connect_and_home(backend, key="linear-home-before-idempotent-move")

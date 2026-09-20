@@ -19,7 +19,7 @@ from src.hardware.rs485_bus import Rs485Bus
 
 
 # Register source required by W1.1:
-# autospin_system/hardware/heating_stage/heating_stage_controller.py:26-31
+# AutoSpinmotorSystem/hardware/heating_stage/heating_stage_controller.py:26-31
 # defines PV=74, SV=0, Srun=27 and scale=10; lines 133-146 define the two
 # writes performed by set_sv (SV first, then Srun=0).
 PV_READ_REQUEST = bytes.fromhex("03 03 00 4A 00 01 A4 3E")

@@ -5,7 +5,7 @@
 ## 背景（一段话）
 
 加热台 = 宇电 AI-516P 温控器，Modbus RTU，挂共享 RS485 总线。真机 bring-up 已于
-2026-06-19 通过（能读 PV）。现有可参考实现：`autospin_system/hardware/heating_stage/`
+2026-06-19 通过（能读 PV）。唯一权威旧行为来源：`AutoSpinmotorSystem/hardware/heating_stage/`
 （师兄栈，读写逻辑可信，工程规范不合格）。本卡产出正式版 L3 backend，为 Web 面板
 和 Agent 工具面提供加热能力。**API 形状以 Agent 工具面为准（ADR-004/006），
 不为任何 UI 便利变形。**
@@ -47,7 +47,7 @@ class HeaterBackend:
 ## 测试要求（fake bus / fake serial）
 
 1. set_sv 正常路径：Modbus 帧字节与 AI-516P 协议一致（寄存器地址从
-   `autospin_system/hardware/heating_stage/` 现有实现抄，注明来源行号）。
+   `AutoSpinmotorSystem/hardware/heating_stage/` 权威旧实现确认，注明来源行号）。
 2. 超上限拒绝：`sv_c > sv_max_c` 抛 L3Error 且不发字节。
 3. 幂等：同 key 两次 set_sv 只发一次帧。
 4. dry_run 不发字节。

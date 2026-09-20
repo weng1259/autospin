@@ -247,7 +247,7 @@ def test_mock_lifecycle_routes_flip_six_device_connection_states() -> None:
     assert registry.linear_stage.status().connected is False
 
 
-def test_mock_system_estop_uses_five_motion_and_heat_devices() -> None:
+def test_mock_system_estop_releases_gripper_with_motion_and_heat_devices() -> None:
     registry = DeviceRegistry.from_mocks()
     assert registry.gantry is not None
     assert registry.relay is not None
@@ -274,11 +274,13 @@ def test_mock_system_estop_uses_five_motion_and_heat_devices() -> None:
     assert report["ok"] is True
     assert [step["device"] for step in report["steps"]] == [
         "gantry",
+        "gripper",
         "spincoater",
         "linear_stage",
         "pipette",
         "heater",
     ]
+    assert registry.gripper.get_state().commanded_state.value == "open"
     assert all(
         step["ok"] is True and step["skipped"] is False
         for step in report["steps"]
@@ -291,4 +293,4 @@ def test_mock_system_estop_uses_five_motion_and_heat_devices() -> None:
     assert registry.heater.status().sv_c == 0.0
     assert registry.heater.status().pv_c == 0.0
     assert registry.relay.get_state().channels[3] is True
-    assert registry.gripper.get_state().commanded_state == "closed"
+    assert registry.gripper.get_state().commanded_state == "open"

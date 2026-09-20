@@ -23,17 +23,17 @@
           "returns": "Position"
         },
         "get_status": {
-          "docstring": "返回最近一次快照 —— 不走串口，<1ms 返回。\n\n快照由后台 poller 每 ~200ms 刷新。若从未刷新过（刚 connect 就调用），\n或 poller 刚好拿不到锁，`last_update_ms_ago` 会稍大。",
+          "docstring": "返回最近一次快照 —— 不走串口，<1ms 返回。\n\n        快照由后台 poller 每 ~200ms 刷新。若从未刷新过（刚 connect 就调用），\n        或 poller 刚好拿不到锁，`last_update_ms_ago` 会稍大。",
           "parameters": {},
           "returns": "MachineStatus"
         },
         "halt": {
-          "docstring": "立刻停止：feedhold `!` + jog cancel `\\x85`。幂等。\n\n因为 `move_to` 用 `$J=` jog 命令（Slice 5），`\\x85` 对运动**真正有效**——\n立即 cancel jog 回 Idle，**保留 is_homed 和 MPos**。PM 按 🛑 停后可以\n直接下一个 move_to，不需要重新归零。\n\n（历史：Slice 3 里 move_to 用的是 G1，`\\x85` 对 G1 无效，halt 后\n会卡在 Hold；Slice 5 改 `$J=` 后这个坑消失。）\n\n返回停止后的快照——正常情况应该是 Idle；若因硬件异常 stuck 在 Hold\n也视为成功（由 `_wait_idle` 的 Hold 特判兜住）。\n\n线程安全：None 检查在锁内做第二次（TOCTOU 防护）。外层 pre-lock 检查\n只是快速失败优化；真正的判定必须在 lock 内，因为另一条线程可能在\n我们等 lock 期间调 `_drop_serial()` 把 `_ser` 置 None。",
+          "docstring": "立刻停止：feedhold `!` + jog cancel `\\x85`。幂等。\n\n        因为 `move_to` 用 `$J=` jog 命令（Slice 5），`\\x85` 对运动**真正有效**——\n        立即 cancel jog 回 Idle，**保留 is_homed 和 MPos**。PM 按 🛑 停后可以\n        直接下一个 move_to，不需要重新归零。\n\n        （历史：Slice 3 里 move_to 用的是 G1，`\\x85` 对 G1 无效，halt 后\n        会卡在 Hold；Slice 5 改 `$J=` 后这个坑消失。）\n\n        返回停止后的快照——正常情况应该是 Idle；若因硬件异常 stuck 在 Hold\n        也视为成功（由 `_wait_idle` 的 Hold 特判兜住）。\n\n        线程安全：None 检查在锁内做第二次（TOCTOU 防护）。外层 pre-lock 检查\n        只是快速失败优化；真正的判定必须在 lock 内，因为另一条线程可能在\n        我们等 lock 期间调 `_drop_serial()` 把 `_ser` 置 None。",
           "parameters": {},
           "returns": "MachineStatus"
         },
         "home": {
-          "docstring": "XYZ 归零。Z 先归（向 +），然后 X+Y 并行（grbl `$44/$45` 配置）。\n\n自动处理 Z 刹车时序：归零开始前释放 CH2，归零完成（或异常）后锁回 CH2。\n`$1=255` 让电机常通电，刹车释放期间 Z 不会掉。\n\n幂等性由 @observable 装饰器接管：同 `idempotency_key` 调用 **24h 内**\n直接返回缓存结果，不重复机械动作。TTL 长是因为归零 30s+ 的物理代价\n≫ 缓存 stale 代价；Agent session 断线重连到同一天前就归过的 key\n必须命中（否则会再归一次，磨损电机 + 刹车）。\n\n### dry_run=True（ADR-004 §原则 7）\n\n返回 `HomePlan`（序列 + 预计时长），**不发任何字节**到串口，不动\nZ 刹车。Agent 可先拿 plan 给人确认再提交真实调用。v0 序列和时长\n都硬编码经验值。\n\nRaises:\n    ConnectionError: 串口未连接或中途掉线（dry_run=True 时不 raise，\n        plan 计算不依赖 connection）\n    AlarmStateError: grbl 报错（含归零失败的 alarm 码）\n    BrakeError: DSTUR-T80 继电器无法操作\n    HomingTimeoutError: 90s 内未完成",
+          "docstring": "XYZ 归零。Z 先归（向 +），然后 X+Y 并行（grbl `$44/$45` 配置）。\n\n        自动处理 Z 刹车时序：归零开始前释放 CH2，归零完成（或异常）后锁回 CH2。\n        `$1=255` 让电机常通电，刹车释放期间 Z 不会掉。\n\n        幂等性由 @observable 装饰器接管：同 `idempotency_key` 调用 **24h 内**\n        直接返回缓存结果，不重复机械动作。TTL 长是因为归零 30s+ 的物理代价\n        ≫ 缓存 stale 代价；Agent session 断线重连到同一天前就归过的 key\n        必须命中（否则会再归一次，磨损电机 + 刹车）。\n\n        ### dry_run=True（ADR-004 §原则 7）\n\n        返回 `HomePlan`（序列 + 预计时长），**不发任何字节**到串口，不动\n        Z 刹车。Agent 可先拿 plan 给人确认再提交真实调用。v0 序列和时长\n        都硬编码经验值。\n\n        Raises:\n            ConnectionError: 串口未连接或中途掉线（dry_run=True 时不 raise，\n                plan 计算不依赖 connection）\n            AlarmStateError: grbl 报错（含归零失败的 alarm 码）\n            BrakeError: DSTUR-T80 继电器无法操作\n            HomingTimeoutError: 90s 内未完成",
           "parameters": {
             "dry_run": {
               "default": false,
@@ -60,7 +60,7 @@
           "returns": "bool"
         },
         "move_to": {
-          "docstring": "绝对坐标运动（`$J=G90 X.. Y.. Z.. F..` jog 命令）。\n\n**为什么用 `$J=` 不用 `G1`**（Slice 5 回归 ADR-002 §15-18 路线）：\n- `G1` 是铣削 gcode，`!` feedhold 后只能 `~`（继续原 target）或\n  `\\x18`（soft-reset，丢 is_homed）→ halt 后进退两难\n- `$J=` 是 jog 命令，`\\x85` jog-cancel 立即回 Idle，**保留 is_homed\n  和 MPos** → halt 即\"就地刹车\"，可以直接下一个 move_to\n- bCNC / OpenBuilds 都走 `$J=` 路线；cncjs 不用 `$J=` 是我们否决它的\n  核心理由（ADR-002）\n\n流程：\n1. 校验 connect / homed / soft_limits / feed；\n2. 释放 Z 刹车（无论本次是否走 Z）；\n3. 发 `$J=G90 ...`，等 grbl 回 `ok`（命令进 planner，~10ms）；\n4. `wait_for_idle=True` 则轮询快照直到 state==IDLE 或 timeout；\n5. 锁回 Z 刹车；返回 MoveResult。\n\n注：`$J=` 期间 grbl 状态显示为 `Jog` 而非 `Run`，`_wait_idle` 会把\nIdle 当完成（Jog 当运动中）。\n\n### dry_run=True（ADR-004 §原则 7）\n\n返回 `MovePlan` 而不发字节：soft_limits 和 feed 校验仍然执行（plan\n可报告会 raise 的错误让 Agent 提前知道），但**不动机器、不动 Z 刹车**。\n若已 connect+homed，plan 含 current_position / distance / duration 估算；\n未 connect 时这些字段为 None。\n\nRaises:\n    ConnectionError: 仅非 dry-run 时（plan 计算不依赖串口）\n    MachineNotHomedError / SoftLimitExceededError /\n    AlarmStateError / HomingTimeoutError / BrakeError。",
+          "docstring": "绝对坐标运动（`$J=G90 X.. Y.. Z.. F..` jog 命令）。\n\n        **为什么用 `$J=` 不用 `G1`**（Slice 5 回归 ADR-002 §15-18 路线）：\n        - `G1` 是铣削 gcode，`!` feedhold 后只能 `~`（继续原 target）或\n          `\\x18`（soft-reset，丢 is_homed）→ halt 后进退两难\n        - `$J=` 是 jog 命令，`\\x85` jog-cancel 立即回 Idle，**保留 is_homed\n          和 MPos** → halt 即\"就地刹车\"，可以直接下一个 move_to\n        - bCNC / OpenBuilds 都走 `$J=` 路线；cncjs 不用 `$J=` 是我们否决它的\n          核心理由（ADR-002）\n\n        流程：\n        1. 校验 connect / homed / soft_limits / feed；\n        2. 释放 Z 刹车（无论本次是否走 Z）；\n        3. 发 `$J=G90 ...`，等 grbl 回 `ok`（命令进 planner，~10ms）；\n        4. `wait_for_idle=True` 则轮询快照直到 state==IDLE 或 timeout；\n        5. 锁回 Z 刹车；返回 MoveResult。\n\n        注：`$J=` 期间 grbl 状态显示为 `Jog` 而非 `Run`，`_wait_idle` 会把\n        Idle 当完成（Jog 当运动中）。\n\n        ### dry_run=True（ADR-004 §原则 7）\n\n        返回 `MovePlan` 而不发字节：soft_limits 和 feed 校验仍然执行（plan\n        可报告会 raise 的错误让 Agent 提前知道），但**不动机器、不动 Z 刹车**。\n        若已 connect+homed，plan 含 current_position / distance / duration 估算；\n        未 connect 时这些字段为 None。\n\n        Raises:\n            ConnectionError: 仅非 dry-run 时（plan 计算不依赖串口）\n            MachineNotHomedError / SoftLimitExceededError /\n            AlarmStateError / HomingTimeoutError / BrakeError。",
           "parameters": {
             "dry_run": {
               "default": false,
@@ -95,7 +95,7 @@
           "returns": "Union[MoveResult, MovePlan]"
         },
         "recover_from_alarm": {
-          "docstring": "Alarm / Hold 一键恢复。组合 `soft_reset` + `unlock_alarm` + `home`。\n\n入口状态矩阵（Slice 5 §Q2）：\n- **Alarm** → `\\x18` → (若进 alarm:11) `$X` → `$H`（主路径）\n- **Hold** → `\\x18` → `$X` → `$H`（罕见兜底——`$J=` + `\\x85` 正常\n  halt 会直接回 Idle；只有在 `$J=` 被 grbl reject 或外部客户端发了\n  `!` 时才会 stuck 在 Hold）\n- **Idle** → no-op，立即返回 `actions_taken=[]`（天然幂等）\n- **Run / Jog / Home** → raise `OperationConflictError`（先 halt）\n- **Disconnected** → raise `ConnectionError`（走 Slice 4 「🔌 重新连接」）\n\n幂等：同 `idempotency_key` **24h** 内命中缓存直接返回上次结果（recover\n内部会 home，按 home 的长 TTL 规则。见 observable.py §TTL 分级）。\nAgent session 断线重连到同一天内已恢复过的 key 必须命中，否则会再\n`$H` 归一次零，物理代价不可接受。\n\nRaises:\n    ConnectionError: 串口掉线\n    OperationConflictError: 入口状态是 Run/Jog/Home\n    AlarmStateError / HomingTimeoutError / BrakeError: 内部\n        unlock / home 失败时冒泡；PM 看到具体子错误，再决定下一步。",
+          "docstring": "Alarm / Hold 一键恢复。组合 `soft_reset` + `unlock_alarm` + `home`。\n\n        入口状态矩阵（Slice 5 §Q2）：\n        - **Alarm** → `\\x18` → (若进 alarm:11) `$X` → `$H`（主路径）\n        - **Hold** → `\\x18` → `$X` → `$H`（罕见兜底——`$J=` + `\\x85` 正常\n          halt 会直接回 Idle；只有在 `$J=` 被 grbl reject 或外部客户端发了\n          `!` 时才会 stuck 在 Hold）\n        - **Idle** → no-op，立即返回 `actions_taken=[]`（天然幂等）\n        - **Run / Jog / Home** → raise `OperationConflictError`（先 halt）\n        - **Disconnected** → raise `ConnectionError`（走 Slice 4 「🔌 重新连接」）\n\n        幂等：同 `idempotency_key` **24h** 内命中缓存直接返回上次结果（recover\n        内部会 home，按 home 的长 TTL 规则。见 observable.py §TTL 分级）。\n        Agent session 断线重连到同一天内已恢复过的 key 必须命中，否则会再\n        `$H` 归一次零，物理代价不可接受。\n\n        Raises:\n            ConnectionError: 串口掉线\n            OperationConflictError: 入口状态是 Run/Jog/Home\n            AlarmStateError / HomingTimeoutError / BrakeError: 内部\n                unlock / home 失败时冒泡；PM 看到具体子错误，再决定下一步。",
           "parameters": {
             "idempotency_key": {
               "kind": "keyword_only",
@@ -117,12 +117,12 @@
           "returns": "GrblSettingsValidationResult"
         },
         "soft_reset": {
-          "docstring": "发 ctrl-X (`\\x18`) —— grbl firmware 状态机重置。幂等。\n\n副作用（与 AVR reset 不同，AVR 只在 DTR 脉冲时 reset）：\n- grbl planner 清空，motion 立即停\n- machine coordinates 归零（`is_homed` 必须 reset 为 False）\n- alarm 位清除，但若 `$22=1` 会立刻重回 alarm:11（Homing required）\n- 串口 banner 再次打印，约 200-300ms 到达\n\n不重连 DSTUR 刹车（那是独立串口）。后续恢复动作（unlock / home）\n由调用者负责。",
+          "docstring": "发 ctrl-X (`\\x18`) —— grbl firmware 状态机重置。幂等。\n\n        副作用（与 AVR reset 不同，AVR 只在 DTR 脉冲时 reset）：\n        - grbl planner 清空，motion 立即停\n        - machine coordinates 归零（`is_homed` 必须 reset 为 False）\n        - alarm 位清除，但若 `$22=1` 会立刻重回 alarm:11（Homing required）\n        - 串口 banner 再次打印，约 200-300ms 到达\n\n        不重连 DSTUR 刹车（那是独立串口）。后续恢复动作（unlock / home）\n        由调用者负责。",
           "parameters": {},
           "returns": "None"
         },
         "unlock_alarm": {
-          "docstring": "发 `$X` 清 grbl alarm 位。返回清完后的 MachineStatus。幂等。\n\n如果当前不在 Alarm，`$X` 是无害 no-op（grbl 回 ok）。调用后抓一次\n同步快照，返回 alarm 清除后的状态。\n\nRaises:\n    ConnectionError: 串口未连接 / 写入失败\n    AlarmStateError: 极少数情况 grbl 对 `$X` 本身回 error（不该发生）",
+          "docstring": "发 `$X` 清 grbl alarm 位。返回清完后的 MachineStatus。幂等。\n\n        如果当前不在 Alarm，`$X` 是无害 no-op（grbl 回 ok）。调用后抓一次\n        同步快照，返回 alarm 清除后的状态。\n\n        Raises:\n            ConnectionError: 串口未连接 / 写入失败\n            AlarmStateError: 极少数情况 grbl 对 `$X` 本身回 error（不该发生）",
           "parameters": {},
           "returns": "MachineStatus"
         },
@@ -179,7 +179,7 @@
     "HeaterBackend": {
       "methods": {
         "close": {
-          "docstring": "Mark this backend disconnected; never close the shared bus.\n\nRs485Bus 是按物理口的进程级单例，旋涂/移液同挂——任何单设备\nclose 都不许关口（2026-07-16 审查修正）。总线生命周期归组合根管。",
+          "docstring": "Mark this backend disconnected; never close the shared bus.\n\n        Rs485Bus 是按物理口的进程级单例，旋涂/移液同挂——任何单设备\n        close 都不许关口（2026-07-16 审查修正）。总线生命周期归组合根管。",
           "parameters": {},
           "returns": "None"
         },
@@ -272,6 +272,12 @@
               "kind": "positional_or_keyword",
               "required": true,
               "type": "float"
+            },
+            "position_tolerance_mm": {
+              "default": null,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "Optional[float]"
             }
           },
           "returns": "LinearStageActionResult"
@@ -314,7 +320,7 @@
           "returns": "PipetteActionResult"
         },
         "close": {
-          "docstring": "Mark this backend disconnected; never close the shared bus.\n\nRs485Bus 是按物理口的进程级单例，加热台/旋涂同挂——任何单设备\nclose 都不许关口（2026-07-16 审查修正）。总线生命周期归组合根管。",
+          "docstring": "Mark this backend disconnected; never close the shared bus.\n\n        Rs485Bus 是按物理口的进程级单例，加热台/旋涂同挂——任何单设备\n        close 都不许关口（2026-07-16 审查修正）。总线生命周期归组合根管。",
           "parameters": {},
           "returns": "None"
         },
@@ -388,7 +394,7 @@
           "returns": "PipetteStatus"
         },
         "stop": {
-          "docstring": "立即写 IMM_STOP（0x08），急停级动作：无幂等缓存、不等待、不做 dry_run。\n\n柱塞停在当前位置后位置不再可信，homed 复位——继续吸/排前必须重新\nhome。供 SystemEstop 与面板急停调用。",
+          "docstring": "立即写 IMM_STOP（0x08），急停级动作：无幂等缓存、不等待、不做 dry_run。\n\n        柱塞停在当前位置后位置不再可信，homed 复位——继续吸/排前必须重新\n        home。供 SystemEstop 与面板急停调用。",
           "parameters": {},
           "returns": "PipetteActionResult"
         }
@@ -465,7 +471,7 @@
     "SpincoaterBackend": {
       "methods": {
         "close": {
-          "docstring": "Mark this backend disconnected; never close the shared bus.\n\nRs485Bus 是按物理口的进程级单例，加热台/移液枪同挂——任何单设备\nclose 都不许关口（2026-07-16 审查修正）。总线生命周期归组合根管。",
+          "docstring": "Mark this backend disconnected; never close the shared bus.\n\n        Rs485Bus 是按物理口的进程级单例，加热台/移液枪同挂——任何单设备\n        close 都不许关口（2026-07-16 审查修正）。总线生命周期归组合根管。",
           "parameters": {},
           "returns": "None"
         },
@@ -508,7 +514,7 @@
           "returns": "SpinStatus"
         },
         "stop": {
-          "docstring": "Stop with brake by default; 无角度反馈，不能定向停转。",
+          "docstring": "Normally ramp to zero then stop; 无角度反馈，不能定向停转。\n\n        Emergency callers set ``ramp_down=False`` for immediate braking.",
           "parameters": {
             "dry_run": {
               "default": false,
@@ -521,6 +527,12 @@
               "kind": "keyword_only",
               "required": false,
               "type": "Optional[str]"
+            },
+            "ramp_down": {
+              "default": true,
+              "kind": "keyword_only",
+              "required": false,
+              "type": "bool"
             },
             "use_brake": {
               "default": true,
@@ -756,7 +768,7 @@
       "suggested_action_zh": "将体积改为 0 到 pipette.max_volume_ul 之间的有限数值。"
     },
     "RelayCommunicationError": {
-      "docstring": "DSTUR-T80 USB 继电器通信失败——端口不存在、被占用、write 超时、EMI 断联。\n\nPhase 3.3 起的通用继电器错误。Z 轴刹车专用的 `BrakeError` 是它的子类，\n`GantryBackend` 在 Z 刹车路径捕获本错误后包成 `BrakeError` 重新抛出。",
+      "docstring": "DSTUR-T80 USB 继电器通信失败——端口不存在、被占用、write 超时、EMI 断联。\n\n    Phase 3.3 起的通用继电器错误。Z 轴刹车专用的 `BrakeError` 是它的子类，\n    `GantryBackend` 在 Z 刹车路径捕获本错误后包成 `BrakeError` 重新抛出。",
       "error_code": "L3.RELAY",
       "recoverable": true,
       "severity": "alarm",
@@ -1656,6 +1668,11 @@
         "position": {
           "$ref": "#/$defs/Position"
         },
+        "position_valid": {
+          "default": true,
+          "title": "Position Valid",
+          "type": "boolean"
+        },
         "raw": {
           "default": "",
           "title": "Raw",
@@ -1675,6 +1692,18 @@
         },
         "state": {
           "$ref": "#/$defs/MachineState"
+        },
+        "status_error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Status Error"
         }
       },
       "required": [
@@ -1823,6 +1852,9 @@
             "aspirate",
             "dispense",
             "eject_tip",
+            "blowout",
+            "liquid_detect",
+            "reset",
             "stop"
           ],
           "title": "Action",
@@ -2064,6 +2096,11 @@
             "position": {
               "$ref": "#/$defs/Position"
             },
+            "position_valid": {
+              "default": true,
+              "title": "Position Valid",
+              "type": "boolean"
+            },
             "raw": {
               "default": "",
               "title": "Raw",
@@ -2083,6 +2120,18 @@
             },
             "state": {
               "$ref": "#/$defs/MachineState"
+            },
+            "status_error": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Status Error"
             }
           },
           "required": [
@@ -2316,6 +2365,14 @@
     "SpinStatus": {
       "description": "Latest in-memory spin/fault snapshot; :meth:`status` performs no I/O.",
       "properties": {
+        "acceleration_rpm_per_s": {
+          "default": 500.0,
+          "description": "Software speed-ramp setting; no unverified drive register is written.",
+          "maximum": 6000.0,
+          "minimum": 50.0,
+          "title": "Acceleration Rpm Per S",
+          "type": "number"
+        },
         "brake_engaged": {
           "anyOf": [
             {
@@ -2332,6 +2389,14 @@
         "connected": {
           "title": "Connected",
           "type": "boolean"
+        },
+        "deceleration_rpm_per_s": {
+          "default": 500.0,
+          "description": "Software stop-ramp setting; emergency stop bypasses it.",
+          "maximum": 6000.0,
+          "minimum": 50.0,
+          "title": "Deceleration Rpm Per S",
+          "type": "number"
         },
         "direction": {
           "const": "ccw",

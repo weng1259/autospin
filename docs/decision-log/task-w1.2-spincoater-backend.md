@@ -6,7 +6,7 @@
 
 旋涂电机 = DBLS400 无刷驱动器，Modbus RTU，挂共享 RS485 总线。真机 bring-up 已于
 2026-06-20 过 gate（母线 23.25V，100RPM 低速真转）。可信参考实现：
-`autospin_system/hardware/spin_motor/`（driver_communication.py + motor_controller.py，
+`AutoSpinmotorSystem/hardware/spin_motor/`（driver_communication.py + motor_controller.py，
 读写逻辑经过真机验证，工程规范不合格）。本卡产出正式版 L3 backend。
 **API 形状以 Agent 工具面为准（ADR-004/006）。**
 
@@ -52,7 +52,7 @@ class SpincoaterBackend:
 
 ## 测试要求（fake bus）
 
-1. start 帧字节与参考实现一致（注明抄自 `autospin_system/hardware/spin_motor/` 的行号），
+1. start 帧字节与权威旧实现一致（注明来自 `AutoSpinmotorSystem/hardware/spin_motor/` 的行号），
    rpm→指令值换算含 speed_factor=2.5。
 2. 超 max_rpm 拒绝且不发字节。
 3. stop 默认带刹车；`use_brake=False` 路径帧不同。

@@ -46,6 +46,7 @@ from .types import (
 
 
 DEFAULT_GRIPPER_CHANNEL = 1
+DEFAULT_CLOSE_WAIT_S = 1.0
 
 
 class GripperBackend:
@@ -56,9 +57,15 @@ class GripperBackend:
         relay: RelayBackend,
         *,
         channel: int = DEFAULT_GRIPPER_CHANNEL,
+        close_wait_s: float = DEFAULT_CLOSE_WAIT_S,
+        emergency_release: bool = True,
     ) -> None:
+        if close_wait_s < 0:
+            raise ValueError("close_wait_s must be >= 0")
         self._relay = relay
         self._channel = channel
+        self._close_wait_s = close_wait_s
+        self._emergency_release_enabled = emergency_release
         self._state_lock = threading.Lock()
         self._commanded_state: GripperCommandedState = GripperCommandedState.UNKNOWN
         self._last_command_ts: float = 0.0
@@ -109,11 +116,29 @@ class GripperBackend:
             dry_run=dry_run,
         )
 
+    def stop(self) -> GripperState:
+        """Stop orchestration without changing the relay output."""
+        return self.get_state()
+
+    def emergency_release(self) -> GripperActionResult:
+        """Release through RelayBackend; the Gripper never owns serial IO."""
+        if not self._emergency_release_enabled:
+            raise RuntimeError("Gripper emergency release is disabled by configuration")
+        result = self._set_state(
+            target=GripperCommandedState.OPEN,
+            idempotency_key=f"emergency-release-{time.time_ns()}",
+            dry_run=False,
+            force_relay=True,
+        )
+        assert isinstance(result, GripperActionResult)
+        return result
+
     def _set_state(
         self,
         target: GripperCommandedState,
         idempotency_key: str,
         dry_run: bool,
+        force_relay: bool = False,
     ) -> Union[GripperActionResult, GripperActionPlan]:
         assert target in (
             GripperCommandedState.OPEN,
@@ -134,7 +159,7 @@ class GripperBackend:
             )
 
         # state-memo 只在 commanded_state 已匹配 target 时短路；UNKNOWN 不短路
-        if current == target:
+        if current == target and not force_relay:
             return GripperActionResult(
                 success=True,
                 commanded_state_after=target,
@@ -154,6 +179,10 @@ class GripperBackend:
         with self._state_lock:
             self._commanded_state = target
             self._last_command_ts = time.time()
+
+        if target == GripperCommandedState.CLOSED and self._close_wait_s > 0:
+            time.sleep(self._close_wait_s)
+        duration_ms = (time.time() - t0) * 1000.0
 
         return GripperActionResult(
             success=True,

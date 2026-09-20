@@ -2,6 +2,7 @@ const TOKEN_STORAGE_KEY = "spincoater.web.token";
 const RELAY_NOTE_STORAGE_PREFIX = "spincoater.web.relay-note.";
 const RECONNECT_MAX_MS = 8000;
 const EVENT_LIMIT = 100;
+const CHART_POINT_LIMIT = 60;
 const REQUESTING_OPERATION = "requesting";
 
 const DEVICE_LABELS = {
@@ -50,6 +51,8 @@ const elements = {
   estopButton: document.querySelector("#estop-button"),
   estopSummary: document.querySelector("#estop-summary"),
   estopReport: document.querySelector("#estop-report"),
+  heaterChart: document.querySelector("#heater-chart"),
+  spincoaterChart: document.querySelector("#spincoater-chart"),
   eventCount: document.querySelector("#event-count"),
   eventLog: document.querySelector("#event-log"),
   devicePanels: new Map(
@@ -81,6 +84,7 @@ const state = {
   currentOperation: null,
   operationConflict: null,
   operationRequestInFlight: false,
+  lastOperationRefreshAt: 0,
   startedOperationIds: new Set(),
   completedOperationIds: new Set(),
   panelPending: new Map(),
@@ -97,7 +101,462 @@ const state = {
   routineListRequestInFlight: false,
   routineDeleteConfirmName: null,
   routines: [],
+  chartHistory: {
+    heaterPv: [],
+    heaterSv: [],
+    spincoaterRpm: [],
+  },
 };
+
+function appendChartPoint(series, value) {
+  series.push(Number.isFinite(Number(value)) ? Number(value) : null);
+  if (series.length > CHART_POINT_LIMIT) {
+    series.splice(0, series.length - CHART_POINT_LIMIT);
+  }
+}
+
+function drawLiveChart(canvas, seriesList, { unit, minimum = 0 }) {
+  if (!canvas) {
+    return;
+  }
+  const rect = canvas.getBoundingClientRect();
+  const width = Math.max(220, Math.round(rect.width));
+  const height = 120;
+  const scale = window.devicePixelRatio || 1;
+  canvas.width = Math.round(width * scale);
+  canvas.height = Math.round(height * scale);
+
+  const context = canvas.getContext("2d");
+  context.scale(scale, scale);
+  const styles = getComputedStyle(document.documentElement);
+  const colors = {
+    border: styles.getPropertyValue("--border").trim(),
+    muted: styles.getPropertyValue("--muted").trim(),
+    primary: styles.getPropertyValue("--blue").trim(),
+    secondary: styles.getPropertyValue("--green").trim(),
+  };
+  const padding = { top: 10, right: 8, bottom: 18, left: 34 };
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
+  const values = seriesList.flatMap((series) => series.values).filter(Number.isFinite);
+  const rawMax = values.length ? Math.max(...values, minimum + 1) : minimum + 1;
+  const max = Math.max(rawMax * 1.1, minimum + 1);
+
+  context.clearRect(0, 0, width, height);
+  context.lineWidth = 1;
+  context.strokeStyle = colors.border;
+  context.fillStyle = colors.muted;
+  context.font = '10px ui-monospace, "SF Mono", Menlo, monospace';
+  context.textAlign = "right";
+  context.textBaseline = "middle";
+
+  for (let line = 0; line <= 2; line += 1) {
+    const ratio = line / 2;
+    const y = padding.top + plotHeight * ratio;
+    context.beginPath();
+    context.moveTo(padding.left, y);
+    context.lineTo(width - padding.right, y);
+    context.stroke();
+    context.fillText(`${Math.round(max * (1 - ratio))}`, padding.left - 5, y);
+  }
+  context.textAlign = "left";
+  context.fillText(unit, 3, height - 7);
+
+  for (const series of seriesList) {
+    context.strokeStyle = colors[series.color];
+    context.lineWidth = 2;
+    context.beginPath();
+    let drawing = false;
+    series.values.forEach((value, index) => {
+      if (!Number.isFinite(value)) {
+        drawing = false;
+        return;
+      }
+      const denominator = Math.max(CHART_POINT_LIMIT - 1, 1);
+      const slot = CHART_POINT_LIMIT - series.values.length + index;
+      const x = padding.left + (slot / denominator) * plotWidth;
+      const y = padding.top + plotHeight - ((value - minimum) / (max - minimum)) * plotHeight;
+      if (drawing) {
+        context.lineTo(x, y);
+      } else {
+        context.moveTo(x, y);
+        drawing = true;
+      }
+    });
+    context.stroke();
+  }
+}
+
+function renderLiveCharts() {
+  drawLiveChart(elements.heaterChart, [
+    { values: state.chartHistory.heaterPv, color: "primary" },
+    { values: state.chartHistory.heaterSv, color: "secondary" },
+  ], { unit: "℃" });
+  drawLiveChart(elements.spincoaterChart, [
+    { values: state.chartHistory.spincoaterRpm, color: "primary" },
+  ], { unit: "RPM" });
+}
+
+async function loadRuntimeConfiguration() {
+  if (!token()) {
+    return;
+  }
+  const config = await api("/api/config/runtime");
+  const limits = config.gantry && config.gantry.soft_limits;
+  const ranges = {
+    "gantry-x": limits && [limits.x_min_mm, limits.x_max_mm],
+    "gantry-y": limits && [limits.y_min_mm, limits.y_max_mm],
+    "gantry-z": limits && [limits.z_min_mm, limits.z_max_mm],
+    "linear-stage": config.linear_stage && [
+      config.linear_stage.min_position_mm,
+      config.linear_stage.max_position_mm,
+    ],
+  };
+  for (const input of document.querySelectorAll("[data-config-range]")) {
+    const range = ranges[input.dataset.configRange];
+    if (range) {
+      input.min = String(range[0]);
+      input.max = String(range[1]);
+    }
+  }
+  const maxima = {
+    heater: config.heater && config.heater.sv_max_c,
+    spincoater: config.spincoater && config.spincoater.max_rpm,
+    pipette: config.pipette && config.pipette.max_volume_ul,
+  };
+  for (const input of document.querySelectorAll("[data-config-max]")) {
+    const maximum = maxima[input.dataset.configMax];
+    if (Number.isFinite(maximum)) {
+      input.max = String(maximum);
+    }
+  }
+}
+
+function setBuilderMessage(message, danger = false) {
+  const output = document.querySelector("#builder-message");
+  output.textContent = message;
+  output.classList.toggle("is-danger", danger);
+  output.classList.toggle("is-success", !danger);
+}
+
+let builderDefaults = null;
+let builderDefaultsLoading = false;
+let builderInitialized = false;
+let builderDirty = false;
+let savedBuilderRecipeName = null;
+let builderRealRunArmed = false;
+
+function groupField(card, name) {
+  return card.querySelector(`[data-group-field="${name}"]`);
+}
+
+function updateBuilderTotals() {
+  const cards = [...document.querySelectorAll(".builder-group-card")];
+  const total = cards.reduce(
+    (sum, card) => sum + Math.max(0, Number(groupField(card, "repeats").value) || 0),
+    0,
+  );
+  document.querySelector("#builder-total-rounds").textContent = String(total);
+  cards.forEach((card, index) => {
+    const name = groupField(card, "name").value.trim() || `参数组 ${index + 1}`;
+    card.querySelector("[data-group-title]").textContent = name;
+    card.querySelector("[data-group-repeat-summary]").textContent =
+      String(Math.max(0, Number(groupField(card, "repeats").value) || 0));
+    card.querySelector(".builder-remove-group").disabled = cards.length === 1;
+    const duration = Number(groupField(card, "stage_2_time_s").value);
+    const delay = Number(groupField(card, "antisolvent_delay_stage_2_s").value);
+    const useAntisolvent = groupField(card, "use_antisolvent").checked;
+    const ratio = duration > 0 ? delay / duration : 0;
+    const ratioOutput = card.querySelector("[data-group-ratio]");
+    ratioOutput.textContent = useAntisolvent && Number.isFinite(ratio)
+      ? ratio.toFixed(2)
+      : "不使用";
+    ratioOutput.classList.toggle(
+      "is-danger",
+      useAntisolvent && (ratio < 0 || ratio > 1),
+    );
+    groupField(card, "antisolvent_delay_stage_2_s").max =
+      duration > 0 ? String(duration) : "0";
+    ["antisolvent_volume_ul", "antisolvent_delay_stage_2_s"].forEach((name) => {
+      const input = groupField(card, name);
+      input.disabled = !useAntisolvent;
+      input.required = useAntisolvent;
+    });
+  });
+}
+
+function addBuilderGroup(values = {}) {
+  const container = document.querySelector("#builder-groups");
+  const template = document.querySelector("#builder-group-template");
+  const card = template.content.firstElementChild.cloneNode(true);
+  const index = container.children.length + 1;
+  const defaults = {
+    ...(builderDefaults ? builderDefaults.default_group : {}),
+    name: `参数组 ${index}`,
+    ...values,
+  };
+  card.querySelectorAll("[data-group-field]").forEach((input) => {
+    const value = defaults[input.dataset.groupField];
+    if (input.type === "checkbox") {
+      input.checked = value === undefined ? true : Boolean(value);
+    } else {
+      input.value = value === undefined ? "" : String(value);
+    }
+    input.addEventListener("input", () => {
+      builderDirty = true;
+      updateBuilderTotals();
+    });
+  });
+  card.querySelector(".builder-remove-group").addEventListener("click", () => {
+    card.remove();
+    updateBuilderTotals();
+  });
+  container.append(card);
+  updateBuilderTotals();
+}
+
+async function loadExperimentBuilderDefaults() {
+  if (!token() || builderDefaultsLoading || builderInitialized || builderDirty) {
+    return;
+  }
+  builderDefaultsLoading = true;
+  try {
+    const defaults = await api("/api/experiment-builder/defaults");
+    builderDefaults = defaults;
+    if (builderDirty) {
+      return;
+    }
+    const form = document.querySelector("#experiment-builder-form");
+    form.elements.namedItem("experiment_name").value =
+      defaults.default_experiment_name;
+    form.elements.namedItem("output_name").value = defaults.default_output;
+    document.querySelector("#builder-groups").replaceChildren();
+    addBuilderGroup(defaults.default_group);
+    builderInitialized = true;
+  } catch (error) {
+    setBuilderMessage(`构建器默认值读取失败：${error.message}`, true);
+  } finally {
+    builderDefaultsLoading = false;
+  }
+}
+
+function builderPayload(save) {
+  const form = document.querySelector("#experiment-builder-form");
+  const numericFields = [
+    "repeats",
+    "precursor_volume_ul",
+    "antisolvent_volume_ul",
+    "annealing_temperature_c",
+    "stage_1_speed_rpm",
+    "stage_1_time_s",
+    "stage_2_speed_rpm",
+    "stage_2_time_s",
+    "antisolvent_delay_stage_2_s",
+    "tip_height_mm",
+    "annealing_time_s",
+  ];
+  const groups = [...document.querySelectorAll(".builder-group-card")].map((card) => {
+    const group = {
+      name: groupField(card, "name").value.trim(),
+      use_antisolvent: groupField(card, "use_antisolvent").checked,
+    };
+    numericFields.forEach((name) => {
+      group[name] = Number(groupField(card, name).value);
+    });
+    return group;
+  });
+  return {
+    experiment_name: form.elements.namedItem("experiment_name").value.trim(),
+    output_name: form.elements.namedItem("output_name").value.trim(),
+    groups,
+    save,
+  };
+}
+
+function renderBuilderSummary(payload) {
+  const summary = payload.summary || {};
+  const human = payload.human_check || {};
+  const steps = Array.isArray(summary.preview_steps) ? summary.preview_steps : [];
+  const container = document.querySelector("#builder-summary");
+  const commandMock = payload.run_commands && payload.run_commands.mock
+    ? payload.run_commands.mock
+    : "—";
+  const commandReal = payload.run_commands && payload.run_commands.real
+    ? payload.run_commands.real
+    : "—";
+  const groups = Array.isArray(payload.groups) ? payload.groups : [];
+  const groupRows = groups.map((group) => `
+    <tr>
+      <td>${escapeHtml(group.name)}</td>
+      <td class="numeric-reading">${group.repeats} 次<br>第 ${group.round_start}–${group.round_end} 轮</td>
+      <td>${formatMetric(group.precursor_volume_ul, "µL")}</td>
+      <td>${group.use_antisolvent
+        ? `${formatMetric(group.antisolvent_volume_ul, "µL")}<br>${formatMetric(group.antisolvent_delay_stage_2_s, "s")}（r=${Number(group.antisolvent_timing_ratio).toFixed(2)}）`
+        : "不使用"}</td>
+      <td>速度：${formatMetric(group.stage_1_speed_rpm, "RPM")}<br>时间：${formatMetric(group.stage_1_time_s, "s")}</td>
+      <td>速度：${formatMetric(group.stage_2_speed_rpm, "RPM")}<br>时间：${formatMetric(group.stage_2_time_s, "s")}</td>
+      <td>温度：${formatMetric(group.annealing_temperature_c, "°C")}<br>时间：${formatMetric(group.annealing_time_s, "s")}</td>
+      <td>${formatMetric(group.tip_height_mm, "mm")}</td>
+    </tr>
+  `).join("");
+  const rows = steps.slice(0, 24).map((step) => `
+    <tr>
+      <td class="numeric-reading">${step.index}</td>
+      <td>${escapeHtml(step.operation)}</td>
+      <td><code>${escapeHtml(JSON.stringify(step.params || {}))}</code></td>
+    </tr>
+  `).join("");
+  container.innerHTML = `
+    <dl class="builder-metrics">
+      <div><dt>状态</dt><dd>${payload.saved ? "已保存" : "dry-run 通过"}</dd></div>
+      <div><dt>总轮数</dt><dd class="numeric-reading">${payload.rounds ?? summary.rounds ?? "—"}</dd></div>
+      <div><dt>参数组</dt><dd class="numeric-reading">${groups.length}</dd></div>
+      <div><dt>每轮步骤</dt><dd class="numeric-reading">${summary.operations_per_round ?? "—"}</dd></div>
+      <div><dt>总步骤</dt><dd class="numeric-reading">${summary.operation_count ?? "—"}</dd></div>
+      <div><dt>龙门目标</dt><dd class="numeric-reading">${summary.gantry_targets ?? "—"}</dd></div>
+      <div><dt>移液动作</dt><dd class="numeric-reading">${summary.pipette_operations ?? "—"}</dd></div>
+      <div><dt>旋涂动作</dt><dd class="numeric-reading">${summary.spin_operations ?? "—"}</dd></div>
+    </dl>
+    <table class="builder-group-summary-table">
+      <thead>
+        <tr>
+          <th scope="col">参数组</th><th scope="col">重复 / 轮次</th>
+          <th scope="col">前驱液</th><th scope="col">反溶剂 / 时机</th>
+          <th scope="col">阶段 1</th><th scope="col">阶段 2</th>
+          <th scope="col">退火</th><th scope="col">Tip 高度</th>
+        </tr>
+      </thead>
+      <tbody>${groupRows || '<tr><td class="routine-empty" colspan="8">无参数组</td></tr>'}</tbody>
+    </table>
+    <div class="builder-checks">
+      ${(payload.groups || []).map((group) => `
+        <span>
+          <strong>${escapeHtml(group.name)}</strong>
+          · 第 ${group.round_start}–${group.round_end} 轮
+          · ${group.use_antisolvent
+            ? `r=${Number(group.antisolvent_timing_ratio).toFixed(2)}`
+            : "不使用反溶剂"}
+        </span>
+      `).join("")}
+      <span>输出 ${escapeHtml(payload.output || "—")}</span>
+    </div>
+    <div class="builder-command-grid">
+      <code>${escapeHtml(commandMock)}</code>
+      <code>${escapeHtml(commandReal)}</code>
+    </div>
+    <table class="routine-table builder-preview-table">
+      <thead><tr><th scope="col">#</th><th scope="col">动作</th><th scope="col">参数</th></tr></thead>
+      <tbody>${rows || '<tr><td class="routine-empty" colspan="3">无步骤</td></tr>'}</tbody>
+    </table>
+  `;
+}
+
+function formatMetric(value, unit) {
+  return Number.isFinite(Number(value)) ? `${Number(value).toLocaleString()} ${unit}` : `— ${unit}`;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function bindBuilderControls() {
+  const builderForm = document.querySelector("#experiment-builder-form");
+  builderForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!builderForm.reportValidity()) {
+      return;
+    }
+    try {
+      const result = await api("/api/experiment-builder/recipe", builderPayload(true));
+      renderBuilderSummary(result);
+      savedBuilderRecipeName = result.recipe_name || null;
+      builderRealRunArmed = false;
+      document.querySelector("#builder-run-dry-button").disabled = !savedBuilderRecipeName;
+      const realRunButton = document.querySelector("#builder-run-real-button");
+      realRunButton.disabled = !savedBuilderRecipeName;
+      realRunButton.textContent = "正式运行已保存 recipe";
+      setBuilderMessage(`已保存 recipe：${result.output}`);
+    } catch (error) {
+      setBuilderMessage(`保存失败：${error.message}`, true);
+    }
+  });
+  document.querySelector("#builder-preview-button").addEventListener("click", async () => {
+    if (!builderForm.reportValidity()) {
+      return;
+    }
+    try {
+      const result = await api("/api/experiment-builder/recipe", builderPayload(false));
+      renderBuilderSummary(result);
+      setBuilderMessage("Dry-run 预览通过");
+    } catch (error) {
+      setBuilderMessage(`预览失败：${error.message}`, true);
+    }
+  });
+  builderForm.elements.namedItem("experiment_name").addEventListener("input", () => {
+    builderDirty = true;
+    const name = builderForm.elements.namedItem("experiment_name").value.trim();
+    if (name) {
+      builderForm.elements.namedItem("output_name").value =
+        `${name.replace(/[^a-zA-Z0-9_.-]+/g, "_")}.json`;
+    }
+  });
+  document.querySelector("#builder-add-group").addEventListener(
+    "click",
+    () => {
+      builderDirty = true;
+      addBuilderGroup();
+    },
+  );
+  document.querySelector("#builder-run-dry-button").addEventListener("click", () => {
+    void runSavedBuilderRecipe(true);
+  });
+  document.querySelector("#builder-run-real-button").addEventListener("click", () => {
+    const button = document.querySelector("#builder-run-real-button");
+    if (!builderRealRunArmed) {
+      builderRealRunArmed = true;
+      button.textContent = "再次点击确认正式运行";
+      setBuilderMessage(
+        "正式运行待确认：请核对轮数、参数、耗材和设备状态后再次点击",
+        true,
+      );
+      return;
+    }
+    builderRealRunArmed = false;
+    button.textContent = "正式运行已保存 recipe";
+    void runSavedBuilderRecipe(false);
+  });
+}
+
+async function runSavedBuilderRecipe(dryRun) {
+  if (!savedBuilderRecipeName) {
+    setBuilderMessage("请先生成并保存多轮 recipe", true);
+    return;
+  }
+  const mode = dryRun ? "Dry-run" : "正式运行";
+  try {
+    const accepted = await api(
+      "/api/experiments/multi-round/execute",
+      {
+        recipe_name: savedBuilderRecipeName,
+        dry_run: dryRun,
+      },
+    );
+    setBuilderMessage(
+      `${mode}已提交：${accepted.rounds} 轮，operation ${accepted.operation_id}`,
+    );
+    logEvent(
+      "多轮实验",
+      `${mode} ${savedBuilderRecipeName} · ${accepted.rounds} 轮`,
+    );
+  } catch (error) {
+    setBuilderMessage(`${mode}提交失败：${error.message}`, true);
+  }
+}
 
 function token() {
   return elements.tokenInput.value.trim();
@@ -121,6 +580,7 @@ function authorizationHeaders({ json = false, eventStream = false } = {}) {
 function setConnectionState(dot, copy, mode, text) {
   dot.classList.toggle("is-online", mode === "online");
   dot.classList.toggle("is-danger", mode === "danger");
+  copy.classList.toggle("is-online", mode === "online");
   copy.classList.toggle("is-danger", mode === "danger");
   copy.textContent = text;
 }
@@ -136,6 +596,10 @@ function setStreamState(mode, text) {
 function setAuthMessage(text, { danger = false } = {}) {
   elements.authMessage.textContent = text;
   elements.authMessage.classList.toggle("is-danger", danger);
+  elements.authMessage.classList.toggle(
+    "is-success",
+    !danger && text === "Token 已验证",
+  );
 }
 
 function handleUnauthorized() {
@@ -179,6 +643,24 @@ function errorMessage(payload, fallback) {
   }
   if (payload && typeof payload.detail === "string") {
     return payload.detail;
+  }
+  if (payload && payload.detail && typeof payload.detail === "object") {
+    const detail = payload.detail;
+    const issues = detail.safety && Array.isArray(detail.safety.issues)
+      ? detail.safety.issues
+      : [];
+    if (issues.length) {
+      const prefix = Number.isFinite(Number(detail.round))
+        ? `第 ${Number(detail.round)} 轮：`
+        : "";
+      return `${prefix}${issues.map((issue) => (
+        `${issue.code || "SAFETY"}：${issue.message || "安全校验失败"}`
+      )).join("；")}`;
+    }
+    if (Array.isArray(detail)) {
+      return detail.map((item) => item.msg || JSON.stringify(item)).join("；");
+    }
+    return JSON.stringify(detail);
   }
   return fallback;
 }
@@ -383,6 +865,7 @@ function setDeviceConnection(device, snapshot, connectedField = null) {
 
   dot.classList.toggle("is-online", mode === "online");
   dot.classList.toggle("is-danger", mode === "danger");
+  copy.classList.toggle("is-online", mode === "online");
   copy.classList.toggle("is-danger", mode === "danger");
   copy.textContent = text;
 }
@@ -390,6 +873,7 @@ function setDeviceConnection(device, snapshot, connectedField = null) {
 function renderGantrySnapshot(snapshot) {
   setDeviceConnection("gantry", snapshot);
   const position = snapshotRecord(snapshot && snapshot.position);
+  const positionValid = snapshot && snapshot.position_valid !== false;
   const machineState = snapshot && typeof snapshot.state === "string"
     ? snapshot.state
     : null;
@@ -401,7 +885,7 @@ function renderGantrySnapshot(snapshot) {
   setReadout("gantry-y", formatNumber(position && position.y_mm, 2, "mm"));
   setReadout("gantry-z", formatNumber(position && position.z_mm, 2, "mm"));
   setReadout("gantry-state", machineState || "—", {
-    danger: machineState === "alarm",
+    danger: machineState === "alarm" || !positionValid,
   });
   setReadout(
     "gantry-homed",
@@ -412,6 +896,13 @@ function renderGantrySnapshot(snapshot) {
     limits === null ? "—" : limits.length === 0 ? "无" : limits.join(" "),
     { danger: Boolean(limits && limits.length) },
   );
+  if (!positionValid) {
+    setPanelMessage(
+      "gantry",
+      "控制器返回异常坐标，已禁止继续运动。请立即停止，检查限位/接线干扰并重新归零。",
+      { danger: true },
+    );
+  }
 
   state.gantryMachineState = machineState;
   updatePanelControls("gantry");
@@ -421,6 +912,12 @@ function renderHeaterSnapshot(snapshot) {
   setDeviceConnection("heater", snapshot, "connected");
   setReadout("heater-pv", formatNumber(snapshot && snapshot.pv_c, 1, "℃"));
   setReadout("heater-sv", formatNumber(snapshot && snapshot.sv_c, 1, "℃"));
+  appendChartPoint(state.chartHistory.heaterPv, snapshot && snapshot.pv_c);
+  appendChartPoint(state.chartHistory.heaterSv, snapshot && snapshot.sv_c);
+  elements.heaterChart.setAttribute(
+    "aria-label",
+    `加热台实时温度趋势，PV ${formatNumber(snapshot && snapshot.pv_c, 1, "℃")}，SV ${formatNumber(snapshot && snapshot.sv_c, 1, "℃")}`,
+  );
 }
 
 function renderSpincoaterSnapshot(snapshot) {
@@ -431,6 +928,19 @@ function renderSpincoaterSnapshot(snapshot) {
   setReadout(
     "spincoater-rpm",
     formatNumber(snapshot && snapshot.target_rpm, 0, "RPM"),
+  );
+  setReadout(
+    "spincoater-acceleration",
+    formatNumber(snapshot && snapshot.acceleration_rpm_per_s, 0, "RPM/s"),
+  );
+  setReadout(
+    "spincoater-deceleration",
+    formatNumber(snapshot && snapshot.deceleration_rpm_per_s, 0, "RPM/s"),
+  );
+  appendChartPoint(state.chartHistory.spincoaterRpm, snapshot && snapshot.target_rpm);
+  elements.spincoaterChart.setAttribute(
+    "aria-label",
+    `旋涂仪实时指令转速趋势，当前 ${formatNumber(snapshot && snapshot.target_rpm, 0, "RPM")}`,
   );
   setReadout(
     "spincoater-running",
@@ -499,6 +1009,12 @@ function renderRelaySnapshot(snapshot) {
       { online: value === true },
     );
   }
+  const vacuumOn = channels ? channels["3"] : undefined;
+  setReadout(
+    "spincoater-vacuum",
+    vacuumOn === true ? "ON" : vacuumOn === false ? "OFF" : "—",
+    { online: vacuumOn === true },
+  );
 }
 
 function renderGripperSnapshot(snapshot) {
@@ -519,6 +1035,7 @@ function renderDeviceSnapshots(devices) {
   renderLinearStageSnapshot(snapshotRecord(values.linear_stage));
   renderRelaySnapshot(snapshotRecord(values.relay));
   renderGripperSnapshot(snapshotRecord(values.gripper));
+  renderLiveCharts();
 }
 
 function updatePanelControls(device) {
@@ -978,9 +1495,14 @@ function recordOperationCompletion(operation) {
 }
 
 async function refreshCurrentOperation() {
-  if (state.operationRequestInFlight) {
+  const now = Date.now();
+  if (
+    state.operationRequestInFlight
+    || now - state.lastOperationRefreshAt < 1000
+  ) {
     return;
   }
+  state.lastOperationRefreshAt = now;
   state.operationRequestInFlight = true;
   try {
     const operation = await api("/api/operations/current");
@@ -1241,6 +1763,14 @@ async function sendEstop() {
   try {
     const report = await apiEstop();
     renderEstopReport(report);
+    // 服务端会在系统急停完成后终止当前 operation。立即同步本地状态，避免
+    // SSE 暂时断线时面板仍保持禁用、顶部计时器继续增加。
+    for (const device of [...state.panelPending.keys()]) {
+      clearPanelPending(device);
+    }
+    state.currentOperation = null;
+    state.operationConflict = null;
+    renderCurrentOperation();
     for (const step of report.steps || []) {
       const result = step.skipped ? "跳过" : step.ok ? "成功" : `失败：${step.error || "未知错误"}`;
       logEvent(
@@ -1309,6 +1839,30 @@ function bindDeviceControls() {
       feed: Number(document.querySelector("#gantry-feed").value),
     });
   });
+  document.querySelector("#gantry-dry-run-button").addEventListener("click", () => {
+    if (!gantryMoveForm.reportValidity()) {
+      return;
+    }
+    void runPanelOperation("gantry", "仅校验目标", "/api/gantry/dry-run", {
+      x: formNumber(gantryMoveForm, "x"),
+      y: formNumber(gantryMoveForm, "y"),
+      z: formNumber(gantryMoveForm, "z"),
+      feed: Number(document.querySelector("#gantry-feed").value),
+    });
+  });
+  document.querySelector("#gantry-z-release-button").addEventListener("click", () => {
+    void runPanelOperation("gantry", "释放 Z 制动", "/api/gantry/z-brake", {
+      released: true,
+    });
+  });
+  document.querySelector("#gantry-z-hold-button").addEventListener("click", () => {
+    void runPanelOperation("gantry", "闭合 Z 制动", "/api/gantry/z-brake", {
+      released: false,
+    });
+  });
+  document.querySelector("#gantry-halt-button").addEventListener("click", () => {
+    void runImmediatePanelAction("gantry", "立即停止", "/api/gantry/halt", {});
+  });
 
   const heaterForm = document.querySelector("#heater-sv-form");
   heaterForm.addEventListener("submit", (event) => {
@@ -1332,10 +1886,56 @@ function bindDeviceControls() {
     });
   });
 
+  const spincoaterAccelerationForm = document.querySelector("#spincoater-acceleration-form");
+  spincoaterAccelerationForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!spincoaterAccelerationForm.reportValidity()) {
+      return;
+    }
+    void runPanelOperation(
+      "spincoater",
+      "设置加速度",
+      "/api/spincoater/acceleration",
+      { rpm_per_s: formNumber(spincoaterAccelerationForm, "rpm_per_s") },
+    );
+  });
+
+  const spincoaterDecelerationForm = document.querySelector("#spincoater-deceleration-form");
+  spincoaterDecelerationForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!spincoaterDecelerationForm.reportValidity()) {
+      return;
+    }
+    void runPanelOperation(
+      "spincoater",
+      "设置减速度",
+      "/api/spincoater/deceleration",
+      { rpm_per_s: formNumber(spincoaterDecelerationForm, "rpm_per_s") },
+    );
+  });
+
   document.querySelector("#spincoater-stop-button").addEventListener("click", () => {
     void runPanelOperation("spincoater", "停止", "/api/spincoater/stop", {
       use_brake: document.querySelector("#spincoater-brake").checked,
     });
+  });
+  document.querySelector("#spincoater-vacuum-on-button").addEventListener("click", () => {
+    setPanelMessage("spincoater", "真空阀 CH3 ON 请求已提交");
+    void runPanelOperation(
+      "relay",
+      "真空阀 CH3 ON",
+      "/api/relay/ch",
+      { channel: 3, on: true, force: true },
+    );
+  });
+  document.querySelector("#spincoater-vacuum-off-button").addEventListener("click", () => {
+    setPanelMessage("spincoater", "真空阀 CH3 OFF 请求已提交");
+    void runPanelOperation(
+      "relay",
+      "真空阀 CH3 OFF",
+      "/api/relay/ch",
+      { channel: 3, on: false, force: true },
+    );
   });
 
   const pipetteForm = document.querySelector("#pipette-volume-form");
@@ -1464,6 +2064,10 @@ elements.tokenInput.addEventListener("input", () => {
   }
   state.tokenChangeTimer = window.setTimeout(() => {
     state.tokenChangeTimer = null;
+    void loadRuntimeConfiguration().catch((error) => {
+      setBuilderMessage(`运行配置读取失败：${error.message}`, true);
+    });
+    void loadExperimentBuilderDefaults();
     restartStatusStream();
   }, 300);
 });
@@ -1474,11 +2078,13 @@ elements.estopButton.addEventListener("click", () => {
 bindDeviceControls();
 bindRoutineControls();
 bindRelayNotes();
+bindBuilderControls();
 for (const device of elements.devicePanels.keys()) {
   updatePanelControls(device);
 }
 
 window.setInterval(renderCurrentOperation, 250);
+window.addEventListener("resize", renderLiveCharts);
 window.addEventListener("beforeunload", () => {
   clearReconnectTimer();
   if (state.streamController) {
@@ -1487,6 +2093,10 @@ window.addEventListener("beforeunload", () => {
 });
 
 void checkServiceHealth();
+void loadRuntimeConfiguration().catch((error) => {
+  setBuilderMessage(`运行配置读取失败：${error.message}`, true);
+});
+void loadExperimentBuilderDefaults();
 restartStatusStream();
 
 export { api, apiEstop };

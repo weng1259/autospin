@@ -10,12 +10,22 @@ from __future__ import annotations
 from fastapi import FastAPI
 
 from ..system_estop import EstopReport
+from .gate import OperationGate
 from .registry import DeviceRegistry
 
 
-def register_estop_route(app: FastAPI, registry: DeviceRegistry) -> None:
+def register_estop_route(
+    app: FastAPI,
+    registry: DeviceRegistry,
+    gate: OperationGate,
+) -> None:
     """在其它业务路由与后续门闸之前注册独立急停端点。"""
 
     @app.post("/api/estop", response_model=EstopReport)
     def emergency_stop() -> EstopReport:
-        return registry.estop.halt_all()
+        abort_event = getattr(app.state, "experiment_abort_event", None)
+        if abort_event is not None:
+            abort_event.set()
+        report = registry.estop.halt_all()
+        gate.abort_current_after_estop()
+        return report

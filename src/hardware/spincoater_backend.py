@@ -1,7 +1,7 @@
 """DBLS400 spin-coater backend over the shared Modbus RTU bus.
 
-The protocol bytes follow the hardware-validated legacy implementation at
-``autospin_system/hardware/spin_motor/``:
+The protocol bytes follow the authoritative legacy behavior source at
+``AutoSpinmotorSystem/hardware/spin_motor/``:
 
 - ``driver_communication.py:141-159`` reads DBLS400 register words low-byte
   first, and lines 164-180 write register values in the same byte order;
@@ -115,6 +115,8 @@ class SpincoaterConfig:
     """DBLS400 protocol constants plus the reviewed hard RPM ceiling."""
 
     max_rpm: float
+    acceleration_rpm_per_s: float = 500.0
+    deceleration_rpm_per_s: float = 500.0
     baudrate: int = 9600
     timeout_s: float = 0.5
     control_register: int = 0x8000
@@ -129,6 +131,18 @@ class SpinStatus(BaseModel):
 
     connected: bool
     running: bool
+    acceleration_rpm_per_s: float = Field(
+        default=500.0,
+        ge=50.0,
+        le=6000.0,
+        description="Software speed-ramp setting; no unverified drive register is written.",
+    )
+    deceleration_rpm_per_s: float = Field(
+        default=500.0,
+        ge=50.0,
+        le=6000.0,
+        description="Software stop-ramp setting; emergency stop bypasses it.",
+    )
     target_rpm: float | None = Field(
         default=None,
         description="Last successfully commanded actual speed in RPM.",
@@ -181,6 +195,26 @@ class SpinActionResult(BaseModel):
     event_id: str
 
 
+class SpinAccelerationResult(BaseModel):
+    """Result of changing the in-memory software speed-ramp setting."""
+
+    success: bool
+    acceleration_rpm_per_s: float = Field(ge=50.0, le=6000.0)
+    action_description: str
+    duration_ms: float = Field(ge=0)
+    event_id: str
+
+
+class SpinDecelerationResult(BaseModel):
+    """Result of changing the software stop-ramp setting."""
+
+    success: bool
+    deceleration_rpm_per_s: float = Field(ge=50.0, le=6000.0)
+    action_description: str
+    duration_ms: float = Field(ge=0)
+    event_id: str
+
+
 def _crc16(data: bytes) -> int:
     """Return the standard Modbus RTU CRC-16 value for *data*."""
     crc = 0xFFFF
@@ -199,15 +233,11 @@ def _append_crc(payload: bytes) -> bytes:
 
 
 def _decode_fault_bits(value: int) -> tuple[str, ...]:
-    active = [
+    return tuple(
         f"bit{bit}:{code}({name_zh})"
         for bit, (code, name_zh) in enumerate(_FAULT_BIT_NAMES)
         if value & (1 << bit)
-    ]
-    run_state = (value >> 8) & 0xFF
-    if run_state:
-        active.append(f"high_byte:run_state_0x{run_state:02X}(运行状态字节)")
-    return tuple(active)
+    )
 
 
 class SpincoaterBackend:
@@ -233,10 +263,14 @@ class SpincoaterBackend:
             or config.max_rpm <= 0
             or not math.isfinite(config.speed_factor)
             or config.speed_factor <= 0
+            or not math.isfinite(config.acceleration_rpm_per_s)
+            or not 50.0 <= config.acceleration_rpm_per_s <= 6000.0
+            or not math.isfinite(config.deceleration_rpm_per_s)
+            or not 50.0 <= config.deceleration_rpm_per_s <= 6000.0
         ):
             raise ValueError(
-                "spincoater baudrate, timeout_s, max_rpm, and speed_factor "
-                "must be finite and positive"
+                "spincoater baudrate, timeout_s, max_rpm, speed_factor, and "
+                "acceleration_rpm_per_s and deceleration_rpm_per_s must be valid"
             )
         if (
             config.pole_pairs != _VALIDATED_POLE_PAIRS
@@ -259,9 +293,12 @@ class SpincoaterBackend:
         self._controller_adapter = controller_adapter
         self._lifecycle_lock = threading.Lock()
         self._state_lock = threading.Lock()
+        self._ramp_abort = threading.Event()
         self._connected = False
         self._running = False
         self._target_rpm: float | None = None
+        self._acceleration_rpm_per_s = config.acceleration_rpm_per_s
+        self._deceleration_rpm_per_s = config.deceleration_rpm_per_s
         self._brake_engaged: bool | None = None
         self._fault_register: int | None = None
         self._fault_bits: tuple[str, ...] = ()
@@ -319,6 +356,76 @@ class SpincoaterBackend:
                 self._connected = False
 
     @observable
+    def set_acceleration(self, rpm_per_s: float) -> SpinAccelerationResult:
+        """Set the software ramp rate without writing an unverified drive register."""
+        if not math.isfinite(rpm_per_s) or not 50.0 <= rpm_per_s <= 6000.0:
+            raise ValueError("rpm_per_s must be finite and in [50, 6000]")
+        started = time.monotonic()
+        with self._state_lock:
+            self._acceleration_rpm_per_s = float(rpm_per_s)
+        return SpinAccelerationResult(
+            success=True,
+            acceleration_rpm_per_s=float(rpm_per_s),
+            action_description=(
+                f"Set software spin acceleration to {rpm_per_s:g} RPM/s; "
+                "no unverified DBLS400 register was written"
+            ),
+            duration_ms=(time.monotonic() - started) * 1000.0,
+            event_id="",
+        )
+
+    @observable
+    def set_deceleration(self, rpm_per_s: float) -> SpinDecelerationResult:
+        """Set the normal-stop software ramp; emergency stop ignores it."""
+        if not math.isfinite(rpm_per_s) or not 50.0 <= rpm_per_s <= 6000.0:
+            raise ValueError("rpm_per_s must be finite and in [50, 6000]")
+        started = time.monotonic()
+        with self._state_lock:
+            self._deceleration_rpm_per_s = float(rpm_per_s)
+        return SpinDecelerationResult(
+            success=True,
+            deceleration_rpm_per_s=float(rpm_per_s),
+            action_description=(
+                f"Set software spin deceleration to {rpm_per_s:g} RPM/s; "
+                "normal stop ramps the speed register before applying stop/brake"
+            ),
+            duration_ms=(time.monotonic() - started) * 1000.0,
+            event_id="",
+        )
+
+    def _ramp_speed(self, start_rpm: float, target_rpm: float) -> None:
+        interval_s = 0.2
+        with self._state_lock:
+            ramp_rate = (
+                self._acceleration_rpm_per_s
+                if target_rpm >= start_rpm
+                else self._deceleration_rpm_per_s
+            )
+        steps = max(
+            1,
+            math.ceil(abs(target_rpm - start_rpm) / (ramp_rate * interval_s)),
+        )
+        for index in range(1, steps + 1):
+            if self._ramp_abort.is_set():
+                raise L3Error(
+                    human_message="旋涂速度斜坡已被急停中断",
+                    agent_message="Spin speed ramp aborted by immediate emergency stop.",
+                )
+            next_rpm = start_rpm + (target_rpm - start_rpm) * index / steps
+            command_value = (
+                0 if next_rpm <= 0.0 else self._validate_and_encode_rpm(next_rpm)
+            )
+            if self._controller_adapter is not None:
+                self._controller_adapter.set_speed(next_rpm)
+            else:
+                self._write_single_register(
+                    self._config.speed_set_register,
+                    command_value,
+                )
+            if index < steps:
+                time.sleep(interval_s)
+
+    @observable
     def start(
         self,
         rpm: float,
@@ -332,8 +439,8 @@ class SpincoaterBackend:
         control_value = self._control_word(run=True, brake=False)
         action_description = (
             f"Start DBLS400 CCW with control word 0x{control_value:04X}, then "
-            f"write target {rpm:g} RPM as command {command_value} "
-            "(0x8005 takes raw RPM)"
+            f"ramp to {rpm:g} RPM at {self._acceleration_rpm_per_s:g} RPM/s "
+            f"(final command {command_value}; 0x8005 takes raw RPM)"
         )
         if dry_run:
             return SpinActionResult(
@@ -350,6 +457,7 @@ class SpincoaterBackend:
 
         if self._controller_adapter is not None:
             self._ensure_connected()
+            self._ramp_abort.clear()
             result = self._controller_adapter.start(
                 rpm,
                 idempotency_key=idempotency_key,
@@ -359,12 +467,15 @@ class SpincoaterBackend:
             return result
 
         self._ensure_connected()
+        self._ramp_abort.clear()
         started = time.monotonic()
+        with self._state_lock:
+            start_rpm = self._target_rpm if self._running and self._target_rpm else 0.0
         try:
             # Reference order: motor_controller.py:192-226 starts first, then
             # sets speed.  Each write gets its own shared-bus transaction.
             self._write_single_register(self._config.control_register, control_value)
-            self._write_single_register(self._config.speed_set_register, command_value)
+            self._ramp_speed(start_rpm, rpm)
         except L3ConnectionError:
             self._mark_disconnected()
             raise
@@ -393,12 +504,24 @@ class SpincoaterBackend:
         use_brake: bool = True,
         idempotency_key: str | None = None,
         dry_run: bool = False,
+        ramp_down: bool = True,
     ) -> SpinActionResult:
-        """Stop with brake by default; 无角度反馈，不能定向停转。"""
+        """Normally ramp to zero then stop; 无角度反馈，不能定向停转。
+
+        Emergency callers set ``ramp_down=False`` for immediate braking.
+        """
         control_value = self._control_word(run=False, brake=use_brake)
         stop_mode = "brake" if use_brake else "coast"
+        with self._state_lock:
+            start_rpm = self._target_rpm if self._running and self._target_rpm else 0.0
+            deceleration = self._deceleration_rpm_per_s
+        ramp_description = (
+            f"ramp from {start_rpm:g} RPM at {deceleration:g} RPM/s, then "
+            if ramp_down and start_rpm > 0.0
+            else "immediately "
+        )
         action_description = (
-            f"Stop DBLS400 using {stop_mode} mode with control word "
+            f"Stop DBLS400: {ramp_description}use {stop_mode} mode with control word "
             f"0x{control_value:04X}; final angle is not controllable"
         )
         if dry_run:
@@ -414,8 +537,18 @@ class SpincoaterBackend:
                 event_id="",
             )
 
+        if ramp_down:
+            self._ramp_abort.clear()
+        else:
+            # Interrupt a normal start/stop ramp that may still be active in
+            # another operation thread.  The immediate brake command below is
+            # allowed to proceed without waiting for that ramp to finish.
+            self._ramp_abort.set()
+
         if self._controller_adapter is not None:
             self._ensure_connected()
+            if ramp_down and start_rpm > 0.0:
+                self._ramp_speed(start_rpm, 0.0)
             result = self._controller_adapter.stop(
                 use_brake=use_brake,
                 idempotency_key=idempotency_key,
@@ -427,6 +560,8 @@ class SpincoaterBackend:
         self._ensure_connected()
         started = time.monotonic()
         try:
+            if ramp_down and start_rpm > 0.0:
+                self._ramp_speed(start_rpm, 0.0)
             self._write_single_register(self._config.control_register, control_value)
         except L3ConnectionError:
             self._mark_disconnected()
@@ -488,6 +623,8 @@ class SpincoaterBackend:
             brake_engaged = self._brake_engaged
             fault_register = self._fault_register
             fault_bits = list(self._fault_bits)
+            acceleration_rpm_per_s = self._acceleration_rpm_per_s
+            deceleration_rpm_per_s = self._deceleration_rpm_per_s
             timestamp = self._fault_timestamp
             last_monotonic = self._fault_monotonic
 
@@ -499,6 +636,8 @@ class SpincoaterBackend:
         return SpinStatus(
             connected=connected,
             running=running,
+            acceleration_rpm_per_s=acceleration_rpm_per_s,
+            deceleration_rpm_per_s=deceleration_rpm_per_s,
             target_rpm=target_rpm,
             brake_engaged=brake_engaged,
             fault_register=fault_register,

@@ -7,7 +7,7 @@
 电动移液枪，Modbus RTU，挂共享 RS485 总线。真机完整 gate 已于 2026-06-29 通过
 （home + aspirate + dispense），driver 两处关键修复已入库：动作码低半区 +1（home=0x01）、
 home 轮询 homed 标志 + 超时发 IMM_STOP 刹车、位置原子读 signed、运动默认参数
-50/1250/1250（手册建议值）。可信参考实现：`autospin_system/` 内 pipette driver
+50/1250/1250（手册建议值）。唯一权威旧行为来源：`AutoSpinmotorSystem/` 内 pipette driver
 （git log 搜 "移液 driver" 两个 commit）。退 tip 机构硬件已修好（2026-07-16 PM 确认，
 顶得脱），按正常动作实现。**API 形状以 Agent 工具面为准（ADR-004/006）。**
 
@@ -17,7 +17,7 @@ home 轮询 homed 标志 + 超时发 IMM_STOP 刹车、位置原子读 signed、
 2. 只许新增 `src/hardware/pipette_backend.py`、`tests/test_pipette_backend.py`、
    `tools/pipette_smoke.py`，以及注册性修改：`src/schema_export.py`、`constants.yaml`
    （pipette 段）、`docs/api-v1.json` 重导出。**禁改**其余 `src/hardware/*` 与
-   `autospin_system/`（参考实现只读）。
+   `AutoSpinmotorSystem/`（权威旧行为来源只读）。
 3. 开始/结束跑 `scripts/check.sh`，全绿才算完。
 
 ## API

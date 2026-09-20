@@ -37,6 +37,8 @@ class Position(BaseModel):
 class MachineStatus(BaseModel):
     state: MachineState
     position: Position
+    position_valid: bool = True
+    status_error: Optional[str] = None
     alarm_code: Optional[int] = None
     is_homed: bool = False
     limit_pins: list[str] = Field(default_factory=list)

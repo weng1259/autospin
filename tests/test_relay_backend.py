@@ -85,7 +85,10 @@ def test_connect_opens_serial(mock_serial_cls: MagicMock) -> None:
     assert not relay.is_connected()
     relay.connect()
     assert relay.is_connected()
-    mock_serial_cls.assert_called_once_with("/dev/fake", 9600, timeout=1.0)
+    mock_serial_cls.assert_called_once()
+    args, kwargs = mock_serial_cls.call_args
+    assert args[1] == 9600
+    assert kwargs == {"timeout": 1.0, "exclusive": True}
 
 
 @patch("src.hardware.relay_backend.serial.Serial")

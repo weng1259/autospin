@@ -10,11 +10,12 @@ import logging
 import threading
 from typing import TYPE_CHECKING, Any, Protocol, TypedDict, cast
 
-from fastapi import FastAPI, Request
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
+    from fastapi import FastAPI, Request
+    from fastapi.responses import StreamingResponse
+
     from .registry import DeviceRegistry
 
 _LOGGER = logging.getLogger("webapp.poller")
@@ -174,6 +175,8 @@ class StatusPoller:
 
 def register_status_routes(app: FastAPI, registry: DeviceRegistry) -> None:
     """把纯内存状态端点挂到指定应用实例。"""
+    from fastapi import Request
+    from fastapi.responses import StreamingResponse
 
     @app.get("/api/status")
     def get_status() -> Mapping[str, Any]:

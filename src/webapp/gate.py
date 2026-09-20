@@ -8,12 +8,13 @@ from collections.abc import AsyncIterator, Callable
 from datetime import datetime, timezone
 import json
 import threading
-from typing import Literal, TypedDict, cast
+from typing import Literal, cast
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from typing_extensions import TypedDict
 
 from ..hardware.errors import L3Error, OperationConflictError
 from .poller import PollerLike
@@ -96,6 +97,18 @@ def _internal_error_detail() -> OperationError:
         recoverable=False,
         suggested_action="Inspect server logs before retrying.",
         suggested_action_zh="查看服务端日志，确认原因后再重试。",
+    )
+
+
+def _estop_error_detail() -> OperationError:
+    return OperationError(
+        error_code="L3.OPERATION_ABORTED_BY_ESTOP",
+        human_message="操作已被紧急停止终止。",
+        agent_message="The running operation was aborted after the system emergency stop completed.",
+        severity="alarm",
+        recoverable=True,
+        suggested_action="Verify that the machine is safe, then start a new operation.",
+        suggested_action_zh="确认设备已处于安全状态后，再发起新的操作。",
     )
 
 
@@ -217,6 +230,40 @@ class OperationGate:
                 if operation.id == operation_id:
                     return operation.model_copy(deep=True)
         return None
+
+    def abort_current_after_estop(self) -> Operation | None:
+        """急停完成后终止当前记录并释放门闸。
+
+        Python 无法强制结束正在执行硬件调用的线程，因此迟到的线程结果会由
+        ``_complete`` 按 operation id 忽略。此方法只能在系统急停已经返回后调用，
+        避免把尚未执行安全停机的设备提前标记为空闲。
+        """
+
+        with self._lock:
+            operation = self._current
+            if operation is None:
+                return None
+
+            completed_at = _now()
+            operation.completed_at = completed_at
+            operation.elapsed = _elapsed(operation, completed_at)
+            operation.result = None
+            operation.error = _estop_error_detail()
+            operation.status = "failed"
+            completed = operation.model_copy(deep=True)
+            self._history.append(completed)
+            self._current = None
+            self._launched.discard(operation.id)
+
+            if self._on_completed is not None:
+                try:
+                    self._on_completed(completed.model_copy(deep=True))
+                except Exception:
+                    _LOGGER.warning(
+                        "operation estop completion callback failed",
+                        exc_info=True,
+                    )
+            return completed
 
     @staticmethod
     def _snapshot(operation: Operation) -> Operation:
@@ -406,3 +453,11 @@ def register_operation_status_routes(
                 "X-Accel-Buffering": "no",
             },
         )
+class OperationExecutionError(L3Error):
+    """Expected background-operation failure safe to expose in the UI."""
+
+    error_code = "L3.OPERATION_EXECUTION_FAILED"
+    severity = "alarm"
+    recoverable = True
+    suggested_action = "Check the operation detail and device state, then retry."
+    suggested_action_zh = "检查失败详情及设备状态，恢复后重新运行。"

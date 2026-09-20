@@ -115,6 +115,38 @@ def test_estop_keeps_bearer_token_authentication() -> None:
     assert estop.calls == 0
 
 
+def test_estop_releases_running_operation_and_records_completion() -> None:
+    estop = _FakeEstop()
+    registry = DeviceRegistry(
+        estop=cast(SystemEstop, estop),
+        mock=True,
+    )
+    app = create_app(registry, token=TOKEN)
+    release = threading.Event()
+
+    with TestClient(app) as client:
+        gate = app.state.operation_gate
+        accepted = gate.submit(
+            "spincoater",
+            "start",
+            lambda _: release.wait(timeout=1.0),
+        )
+        response = client.post("/api/estop", headers=AUTH_HEADERS)
+        current = client.get("/api/operations/current", headers=AUTH_HEADERS)
+        operation = client.get(
+            f"/api/operations/{accepted.id}", headers=AUTH_HEADERS
+        )
+        status = client.get("/api/status", headers=AUTH_HEADERS)
+        release.set()
+
+    assert response.status_code == 200
+    assert current.status_code == 200
+    assert current.json() is None
+    assert operation.json()["status"] == "failed"
+    assert operation.json()["error"]["error_code"] == "L3.OPERATION_ABORTED_BY_ESTOP"
+    assert status.json()["last_operation"]["id"] == accepted.id
+
+
 def test_lifespan_shutdown_calls_halt_all_once_outside_mock_mode() -> None:
     estop = _FakeEstop()
     registry = DeviceRegistry(

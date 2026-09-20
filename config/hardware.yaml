@@ -1,0 +1,173 @@
+hardware:
+  mock: false
+  rs485:
+    port: "/dev/rs485_bus"
+    ownership: "shared_reconfigurable"
+    reconnect: true
+    deployment_confirmation_required: true
+
+  spincoater:
+    port: "/dev/rs485_bus"
+    slave_id: 2
+    baudrate: 9600
+    parity: "N"
+    stop_bits: 1
+    timeout_s: 2.0
+    retry_attempts: 1
+    retry_delay_s: 0.0
+    reconnect: true
+    ownership: "shared_rs485"
+    max_rpm: 6000
+    acceleration_rpm_per_s: 500
+    deceleration_rpm_per_s: 500
+    max_rpm_confirmation_required: false
+    capability_source: "DBLS400 hardware specification reviewed for Phase 6"
+    control_register: 32768
+    speed_set_register: 32773
+    actual_speed_register: 32792
+    fault_register: 32795
+    bus_voltage_register: 32793
+    pole_pairs: 4
+    speed_factor: 2.5
+
+  heater:
+    port: "/dev/rs485_bus"
+    slave_id: 3
+    baudrate: 9600
+    parity: "N"
+    stop_bits: 1
+    timeout_s: 3.0
+    retry_attempts: 1
+    retry_delay_s: 0.0
+    reconnect: true
+    ownership: "shared_rs485"
+    pv_register: 74
+    sv_register: 0
+    srun_register: 27
+    run_on_sv_write: true
+    scale: 10.0
+    sv_max_c: 150
+    sv_max_c_confirmation_required: true
+
+  pipette:
+    port: "/dev/rs485_bus"
+    slave_id: 1
+    baudrate: 115200
+    parity: "N"
+    stop_bits: 1
+    timeout_s: 2.0
+    retry_attempts: 1
+    retry_delay_s: 0.0
+    reconnect: true
+    ownership: "shared_rs485"
+    min_volume_ul: 0
+    home_timeout_s: 30.0
+    action_timeout_s: 10.0
+    poll_interval_s: 0.1
+    speed_01rps: 50
+    accel_01rpss: 1250
+    decel_01rpss: 1250
+    max_volume_ul: 1000
+
+  linear_stage:
+    port: "/dev/rs485_bus"
+    address: 4
+    baudrate: 115200
+    parity: "N"
+    stop_bits: 1
+    timeout_s: 0.5
+    retry_attempts: 1
+    retry_delay_s: 0.0
+    reconnect: true
+    ownership: "shared_rs485"
+    travel_mm: 100.0
+    min_position_mm: -100.0
+    max_position_mm: 100.0
+    position_range_confirmation_required: true
+    lead_mm: 2.0
+    microsteps: 16
+    motor_step_deg: 1.8
+    default_speed_rpm: 2000
+    default_acceleration: 150
+    home_direction: 1
+    home_speed_rpm: 300
+    sensorless_timeout_ms: 10000
+    collision_rpm: 300
+    collision_current_ma: 800
+    collision_time_ms: 60
+    home_timeout_s: 35.0
+    move_timeout_s: 15.0
+    position_tolerance_mm: 0.7
+    poll_interval_s: 0.1
+
+  gantry:
+    port: "/dev/autospin_xyz"
+    baudrate: 115200
+    parity: "N"
+    stop_bits: 1
+    timeout_s: 2.0
+    retry_attempts: 0
+    retry_delay_s: 0.0
+    reconnect: true
+    ownership: "dedicated"
+    deployment_confirmation_required: true
+
+    homing_enabled: true
+
+    soft_limits:
+      x_min_mm: -310.0
+      x_max_mm: -5.0
+      y_min_mm: -310.0
+      y_max_mm: -5.0
+      z_min_mm: -110.0
+      z_max_mm: -5.0
+
+    # Automated gantry motion profile.
+    # AutoSpinmotorSystem hardware acceptance found that 5000 mm/min XY moves
+    # could induce ALARM:1 / false limit inputs. Keep automatic XYZ motion at
+    # the verified 1000 mm/min profile.
+    feed_rate_default: 1000
+    feed_rate_confirmation_required: true
+    max_feed_mm_min: 5000
+    # Z carries a brake and must never inherit the high XY feed.
+    z_feed_mm_min: 1000
+    boundary_feed_mm_min: 1000
+    boundary_margin_mm: 30
+    # When leaving an active/near XY limit, first retreat this far inward on
+    # one axis at boundary speed before starting the long diagonal XY move.
+    boundary_escape_mm: 10
+    grbl_acceleration_mm_s2: 500
+    move_timeout_s: 60
+    status_poll_interval_ms: 200
+
+    commands:
+      home: "$H"
+      unlock: "$X"
+      emergency_stop: "\x18"
+
+  gripper:
+    channel: gripper
+    close_level: true
+    open_level: false
+    close_wait_s: 1.0
+    emergency_release: true
+
+  relay:
+    port: "/dev/serial/by-id/usb-STMicroelectronics_STM32_Virtual_ComPort_in_FS_Mode_6670E0011939-if00"
+    baudrate: 9600
+    parity: "N"
+    stop_bits: 1
+    timeout_s: 1.0
+    retry_attempts: 1
+    retry_delay_s: 0.3
+    reconnect: true
+    ownership: "dedicated_shared_backend"
+    deployment_confirmation_required: true
+    settle_s: 0.3
+    channel_map:
+      gripper: 1
+      z_brake: 2
+      vacuum_valve: 3
+      spin_power: 4
+      aux_light: 5
+    intentional_aliases: {}

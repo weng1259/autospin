@@ -23,7 +23,7 @@ from src.hardware.rs485_bus import Rs485Bus
 
 
 # Frame sources required by W1.3 (fixed Pi SoR commit 1d26520):
-# - autospin_system/hardware/pipette/pipette_controller.py:59-89 defines the
+# - AutoSpinmotorSystem/hardware/pipette/pipette_controller.py:59-89 defines the
 #   corrected one-based actions and 50/1250/1250 motion defaults;
 # - lines 170-180 atomically read signed POS_H/POS_L;
 # - lines 253-292 define IDLE->HOME, homed polling, and timeout IMM_STOP;
@@ -267,6 +267,28 @@ def test_dispense_frame_matches_reference_volume_and_action_code() -> None:
     assert result.success is True
 
 
+def test_dispense_tolerates_one_transient_tip_absence_before_command() -> None:
+    fake_bus = FakeBus(
+        _ready_snapshot_responses()
+        + [
+            TIP_ABSENT_RESPONSE,
+            TIP_PRESENT_RESPONSE,
+            VOLUME_50_WRITE_RESPONSE,
+            DISPENSE_WRITE_REQUEST,
+            ACTION_ACTIVE_RESPONSE,
+            ACTION_IDLE_RESPONSE,
+        ]
+    )
+    backend = _backend(fake_bus)
+    backend.connect()
+
+    result = backend.dispense(50.0, idempotency_key="pipette-transient-tip")
+
+    assert fake_bus.serial.writes.count(TIP_READ_REQUEST) == 3
+    assert DISPENSE_WRITE_REQUEST in fake_bus.serial.writes
+    assert result.success is True
+
+
 def test_eject_tip_frame_waits_until_tip_absent_and_idle() -> None:
     fake_bus = FakeBus(
         _ready_snapshot_responses()
@@ -335,7 +357,8 @@ def test_aspirate_before_home_is_structured_error_without_action_bytes() -> None
 
 def test_missing_tip_is_structured_error_before_liquid_motion() -> None:
     fake_bus = FakeBus(
-        _ready_snapshot_responses(tip_present=False) + [TIP_ABSENT_RESPONSE]
+        _ready_snapshot_responses(tip_present=False)
+        + [TIP_ABSENT_RESPONSE, TIP_ABSENT_RESPONSE, TIP_ABSENT_RESPONSE]
     )
     backend = _backend(fake_bus)
     backend.connect()

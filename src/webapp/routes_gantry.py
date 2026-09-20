@@ -46,6 +46,10 @@ class JogRequest(EmptyRequest):
     feed: float = Field(gt=0.0, allow_inf_nan=False)
 
 
+class ZBrakeRequest(EmptyRequest):
+    released: bool
+
+
 class AcceptedOperation(BaseModel):
     """所有被门闸接纳的龙门操作统一响应。"""
 
@@ -164,6 +168,70 @@ def register_gantry_routes(
                     target,
                     feed_mm_min=request.feed,
                 ),
+            )
+        )
+
+    @app.post(
+        "/api/gantry/dry-run",
+        status_code=202,
+        response_model=AcceptedOperation,
+    )
+    def dry_run(request: MoveRequest) -> AcceptedOperation:
+        gantry = _get_gantry(registry)
+        target = Position(x_mm=request.x, y_mm=request.y, z_mm=request.z)
+        return _accepted(
+            gate.submit(
+                "gantry",
+                "dry-run",
+                lambda _: gantry.move_to(
+                    target,
+                    feed_mm_min=request.feed,
+                    dry_run=True,
+                ),
+            )
+        )
+
+    @app.post(
+        "/api/gantry/halt",
+        response_model=dict,
+    )
+    def halt(request: EmptyRequest = EmptyRequest()) -> dict:
+        del request
+        status = _get_gantry(registry).halt()
+        payload = (
+            status.model_dump(mode="json")
+            if hasattr(status, "model_dump")
+            else {"value": str(status)}
+        )
+        return {"halted": True, "status": payload}
+
+    @app.get(
+        "/api/gantry/homing-diagnostics",
+        status_code=202,
+        response_model=AcceptedOperation,
+    )
+    def homing_diagnostics() -> AcceptedOperation:
+        gantry = _get_gantry(registry)
+        return _accepted(
+            gate.submit(
+                "gantry",
+                "homing-diagnostics",
+                lambda _: gantry.get_homing_diagnostics(),
+            )
+        )
+
+    @app.post(
+        "/api/gantry/z-brake",
+        status_code=202,
+        response_model=AcceptedOperation,
+    )
+    def z_brake(request: ZBrakeRequest) -> AcceptedOperation:
+        gantry = _get_gantry(registry)
+        return _accepted(
+            gate.submit(
+                "gantry",
+                "z-brake",
+                lambda _: gantry.set_z_brake_released(request.released),
             )
         )
 
