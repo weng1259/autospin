@@ -1,0 +1,32 @@
+# Device identity and provenance only. Runtime parameters live in hardware.yaml.
+devices:
+  spincoater:
+    model: "DBLS400"
+    protocol: "Modbus RTU with device-specific word byte order"
+    source: "AutoSpinmotorSystem/hardware/spin_motor/"
+  heater:
+    model: "AI-516 D2 G S"
+    protocol: "Modbus RTU"
+    source: "AutoSpinmotorSystem/hardware/heating_stage/"
+  pipette:
+    model: "28 series 1k"
+    protocol: "Modbus RTU"
+    source: "AutoSpinmotorSystem/hardware/pipette/"
+  linear_stage:
+    model: "ZDT Emm"
+    protocol: "zdt_emm_fixed_6b"
+    source: "AutoSpinmotorSystem/hardware/linear_stage/"
+  relay:
+    model: "LCUS-8"
+    protocol: "A0 channel state checksum"
+    source: "AutoSpinmotorSystem/hardware/relay/"
+  gantry:
+    model: "grbl-Mega-5X"
+    protocol: "GRBL"
+    source: "AutoSpinmotorSystem/hardware/xyz_stage/"
+    migration_status: "completed"
+  gripper:
+    model: "IO-controlled gripper"
+    protocol: "DSTUR-T80 relay IO"
+    source: "AutoSpinmotorSystem/hardware/xyz_stage/l3_backend/hardware/gripper_backend.py"
+    migration_status: "completed"

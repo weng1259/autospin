@@ -1,0 +1,44 @@
+# 智能旋涂仪项目依赖
+# ==================
+#
+# 安装方式：
+#   cd /Users/kevin/Code/智能旋涂仪
+#   python3.10+ -m venv tools/spikes/.venv   # 或已有 venv
+#   tools/spikes/.venv/bin/pip install -r requirements.txt
+#
+# 版本策略：所有版本 pin 到 ==X.Y.Z，避免 minor bump 引入 breaking change。
+# 升级时一次性升 + 跑 tools/ui/slice5_automated_acceptance.py 回归验证。
+#
+# 为什么 pin claude-agent-sdk：这个包处于 Development Status :: 3 - Alpha
+# (见本地副本 /Users/kevin/Code/BiliBili机器人/claude-agent-sdk-python/pyproject.toml)，
+# 0.x 版本 API 可能 breaking。Phase 3.2 在 0.1.65 上验证通过后锁死。
+# 升级需要同步 review src/agent/ 下所有 @tool / hooks 调用。
+
+# ── Agent 层（Phase 3.2 起）──
+claude-agent-sdk==0.1.65
+mcp==1.27.0                # SDK 传递依赖，显式 pin 防止 mcp 大版本跳
+anyio==4.13.0              # SDK 传递依赖
+
+# ── L3 数据模型 + 配置（Phase 3.1 起）──
+pydantic==2.13.2
+pydantic-settings==2.14.0
+
+# ── 硬件串口（Phase 3.0 起）──
+pyserial==3.5
+pymodbus==3.13.0
+PyYAML==6.0.3
+
+# ── UI（Phase 3.1 起）──
+streamlit==1.56.0
+
+# ── Web 控制服务（W3.0 起）──
+fastapi==0.139.2
+uvicorn==0.51.0
+httpx==0.28.1              # FastAPI TestClient 依赖
+
+# ── 测试 / 类型检查（Phase 3.2 起）──
+pytest==8.4.2
+pytest-cov==7.0.0
+mypy==1.18.2
+types-pyserial==3.5.0.20260408
+types-PyYAML==6.0.12.20260408

@@ -59,7 +59,7 @@ stations:
           column: 0
           z_mm: -30.0
     operation:
-      xyz: [-13.0, -40, -84]
+      xyz: [-11.0, -38.5, -84]
       unit: mm
       frame: grbl_machine_negative
       source: "AutoSpinmotorSystem/config/process_coordinates.yaml:baseline_positions.glass.place_on_spincoater"

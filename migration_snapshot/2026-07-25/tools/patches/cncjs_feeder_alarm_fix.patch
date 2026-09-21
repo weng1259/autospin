@@ -1,0 +1,47 @@
+# cncjs Feeder 死锁 bug 修复补丁
+#
+# 文件: /opt/homebrew/lib/node_modules/cncjs/dist/cncjs/server/controllers/Grbl/GrblController.js
+# cncjs 版本: 1.11.0
+# 日期: 2026-04-20
+#
+# Bug: grbl 进 ALARM 时 cncjs 的 Feeder 不调用 reset()，
+# 导致 feeder.pending=true 永久挂住，后续所有用户命令
+# 静默堆积在 queue 里不执行。UI 表现为"卡死"。
+#
+# Fix: 在 on('alarm') 事件处理中调用 _this.feeder.reset()
+# 及对应的 _this.sender.reset() / _this.workflow.stop()，
+# 让系统在 ALARM 后能被新命令驱动（由 data handler 里现有的
+# isAlarm() 检查兜底，会丢弃 ALARM 状态下的命令并要求 $X 解锁）。
+#
+# 如何验证：
+#  1. cncjs 跑起来，连上 grbl
+#  2. 故意触发 ALARM（例如发 $H 时拔传感器线，或 G0 超软限位）
+#  3. 点 jog 方向键
+#  4. 打补丁前：点击无反应，UI 卡死状态
+#  5. 打补丁后：仍然不动（因为 isAlarm() 兜底），但 cncjs log
+#     会刷 "Stopped sending G-code commands in Alarm mode"
+#     点 Unlock($X) 之后 jog 立刻恢复
+#
+# 如何应用（shell）：
+#   cd /opt/homebrew/lib/node_modules/cncjs/dist/cncjs/server/controllers/Grbl/
+#   cp GrblController.js GrblController.js.bak
+#   patch -p0 < /path/to/cncjs_feeder_alarm_fix.patch
+#
+# 如何撤销：
+#   cp GrblController.js.bak GrblController.js
+
+--- GrblController.js.orig
++++ GrblController.js
+@@ -654,6 +654,11 @@ ... lines around on('alarm') ...
+     this.runner.on('alarm', function (res) {
+       var code = Number(res.message) || undefined;
+       var alarm = (0, _find2["default"])(_constants2.GRBL_ALARMS, {
+         code: code
+       });
++      // 智能旋涂仪 patch: ALARM 后 reset Feeder 的 pending 状态
++      // 避免 pending=true 永久挂死，后续 jog 点击全部沉积在 queue 里
++      // 不触 Sender/Workflow，避免影响 gcode 程序运行时的 alarm 处理
++      _this.feeder.reset();
+       if (alarm) {
+         _this.emit('serialport:read', "ALARM:".concat(code, " (").concat(alarm.message, ")"));
+       } else {

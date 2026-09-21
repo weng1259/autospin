@@ -1,0 +1,113 @@
+hardware:
+  mock: false
+  rs485:
+    port: "/dev/rs485_bus"
+
+  spincoater:
+    backend: "verified_adapter"
+    port: "/dev/rs485_bus"
+    slave_id: 2
+    baudrate: 9600
+    timeout_s: 2.0
+    max_rpm: 3000
+    control_register: 32768
+    speed_set_register: 32773
+    fault_register: 32795
+    pole_pairs: 4
+    speed_factor: 2.5
+
+  heater:
+    backend: "verified_adapter"
+    port: "/dev/rs485_bus"
+    slave_id: 3
+    baudrate: 9600
+    timeout_s: 3.0
+    pv_register: 74
+    sv_register: 0
+    srun_register: 27
+    run_on_sv_write: true
+    scale: 10.0
+    sv_max_c: 150
+
+  pipette:
+    backend: "verified_adapter"
+    port: "/dev/rs485_bus"
+    slave_id: 1
+    baudrate: 115200
+    timeout_s: 2.0
+    home_timeout_s: 30.0
+    action_timeout_s: 10.0
+    poll_interval_s: 0.1
+    speed_01rps: 50
+    accel_01rpss: 1250
+    decel_01rpss: 1250
+    max_volume_ul: 1000
+
+  linear_stage:
+    backend: "verified_adapter"
+    port: "/dev/rs485_bus"
+    address: 4
+    baudrate: 115200
+    timeout_s: 0.5
+    travel_mm: 100.0
+    min_position_mm: 0.0
+    max_position_mm: 100.0
+    lead_mm: 2.0
+    microsteps: 16
+    motor_step_deg: 1.8
+    default_speed_rpm: 2000
+    default_acceleration: 150
+    home_direction: 1
+    home_speed_rpm: 300
+    sensorless_timeout_ms: 10000
+    collision_rpm: 300
+    collision_current_ma: 800
+    collision_time_ms: 60
+    home_timeout_s: 35.0
+    move_timeout_s: 15.0
+    position_tolerance_mm: 0.25
+    poll_interval_s: 0.1
+
+  gantry:
+    backend: "verified_driver"
+    driver: "grbl_controller"
+
+    port: "/dev/ttyUSB1"
+    baudrate: 115200
+    timeout_s: 2.0
+
+    homing_enabled: true
+
+    soft_limits:
+      x_min_mm: -310.0
+      x_max_mm: -5.0
+      y_min_mm: -310.0
+      y_max_mm: -5.0
+      z_min_mm: -110.0
+      z_max_mm: -5.0
+
+    feed_rate_default: 300
+
+    commands:
+      home: "$H"
+      unlock: "$X"
+      emergency_stop: "\x18"
+
+  gripper:
+    backend: relay
+    channel: gripper
+    close_wait_s: 1.0
+    emergency_release: true
+
+  relay:
+    port: "/dev/serial/by-id/usb-STMicroelectronics_STM32_Virtual_ComPort_in_FS_Mode_6670E0011939-if00"
+    baudrate: 9600
+    settle_s: 0.3
+    channel_map:
+      gripper: 1
+      z_brake: 2
+      z_brake_grbl: 2
+      nitrogen: 2
+      vacuum_valve: 3
+      spin_power: 4
+      aux_light: 5

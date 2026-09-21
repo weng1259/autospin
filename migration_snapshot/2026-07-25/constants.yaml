@@ -1,0 +1,74 @@
+# 硬编码安全边界（ADR-004 §原则 5）
+# 修改本文件需要 code review，运行时 Agent 不可改。
+# 加载点：src/config.py → load_config()
+
+soft_limits:
+  # 机器坐标系：归零后原点在 +极限，所有合法位置 ≤ 0
+  # 两端各留 5mm 余量（= $27 pull-off）：命令到 -5 时 jog 停在 -5，不压 + 限位
+  # 行程利用率：X/Y 270/280=96%, Z 85/95=89%
+  x_min_mm: -275.0
+  x_max_mm: -5.0
+  y_min_mm: -275.0
+  y_max_mm: -5.0
+  z_min_mm: -90.0
+  z_max_mm: -5.0
+
+motion:
+  default_feed_mm_min: 2000
+  max_feed_mm_min: 3000
+  move_timeout_s: 60
+  # 后台状态轮询间隔（ms）。UI fragment 读内存快照，不受此值影响。
+  status_poll_interval_ms: 200
+
+heater:
+  baudrate: 9600
+  timeout_s: 3.0
+  pv_register: 74
+  sv_register: 0
+  srun_register: 27
+  run_on_sv_write: true
+  scale: 10.0
+  sv_max_c: 150  # TODO PM 按 AI-516P 手册与实验需求确认
+
+spincoater:
+  baudrate: 9600
+  timeout_s: 0.5
+  control_register: 32768  # 0x8000
+  speed_set_register: 32773  # 0x8005
+  fault_register: 32795  # 0x801B
+  pole_pairs: 4
+  speed_factor: 2.5  # 仅用于 0x8018 实际转速回读解码(raw*20/8极); 0x8005 写入直收 RPM 原值, 与写路径无关
+  max_rpm: 3000  # TODO PM 按工艺需求确认
+
+pipette:
+  # 28 系列 1k 型号与厂家手册均给出最大量程 1000 uL。
+  max_volume_ul: 1000
+  baudrate: 115200
+  timeout_s: 2.0
+  home_timeout_s: 30.0
+  action_timeout_s: 10.0
+  poll_interval_s: 0.1
+  # 手册 §5.1.2 建议值；旧 10/20/20 会让 home 误超时。
+  speed_01rps: 50
+  accel_01rpss: 1250
+  decel_01rpss: 1250
+
+linear_stage:
+  baudrate: 115200
+  timeout_s: 0.5
+  travel_mm: 100.0  # TODO PM 实测确认
+  lead_mm: 2.0
+  microsteps: 16
+  motor_step_deg: 1.8
+  default_speed_rpm: 2000
+  default_acceleration: 150
+  home_direction: 1
+  home_speed_rpm: 300
+  sensorless_timeout_ms: 10000
+  collision_rpm: 300
+  collision_current_ma: 800
+  collision_time_ms: 60
+  home_timeout_s: 35.0
+  move_timeout_s: 15.0
+  position_tolerance_mm: 0.25
+  poll_interval_s: 0.1

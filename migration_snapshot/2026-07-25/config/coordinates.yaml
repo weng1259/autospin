@@ -1,0 +1,17 @@
+# Staged from AutoSpinmotorSystem. Not wired into Gantry in this phase.
+coordinates:
+  lab:
+    home: [0.0, 0.0, 0.0]
+    spin_center: [50.0, 50.0, 5.0]
+    clean_station: [10.0, 150.0, 20.0]
+    waste_bin: [180.0, 180.0, 10.0]
+  tool_offsets:
+    gripper:
+      x: -74.8
+      y: 31.5
+      z: 51.5
+    pipette:
+      x: 71.5
+      y: 35.0
+      z: 20.5
+      tip_length: 95.0

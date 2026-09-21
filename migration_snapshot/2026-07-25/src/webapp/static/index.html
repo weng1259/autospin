@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>智能旋涂仪控制台</title>
+    <link rel="stylesheet" href="/static/style.css">
+  </head>
+  <body>
+    <header id="global-status-bar" class="global-status-bar" aria-label="全局状态栏">
+      <div class="status-cluster">
+        <span class="status-item">
+          <span id="service-dot" class="status-dot" aria-hidden="true"></span>
+          <span id="service-status" class="status-copy">服务 等待 token</span>
+        </span>
+        <span class="status-item status-item-secondary">
+          <span id="stream-dot" class="status-dot" aria-hidden="true"></span>
+          <span id="stream-status" class="status-copy">状态流 未连接</span>
+        </span>
+        <span class="sequence-block">
+          <span class="readout-label">SEQ</span>
+          <output id="status-seq" class="numeric-reading">— 帧</output>
+        </span>
+      </div>
+
+      <div class="current-operation" aria-live="polite">
+        <span class="operation-label">当前操作</span>
+        <span id="operation-device-action" class="operation-value is-idle">空闲</span>
+        <output id="operation-elapsed" class="numeric-reading" hidden>0.0 s</output>
+      </div>
+
+      <button id="estop-button" class="estop-button" type="button">紧急停止</button>
+    </header>
+
+    <main class="app-shell">
+      <div class="control-grid">
+        <section class="panel access-panel" aria-labelledby="access-heading">
+          <div class="section-heading">
+            <h1 id="access-heading">连接设置</h1>
+            <p>Token 仅保存在当前浏览器</p>
+          </div>
+          <div class="token-field">
+            <label for="token-input">访问 token（用于 API 鉴权）</label>
+            <input
+              id="token-input"
+              name="token"
+              type="password"
+              autocomplete="off"
+              spellcheck="false"
+              aria-describedby="auth-message"
+            >
+            <span id="auth-message" class="auth-message" aria-live="polite">未设置</span>
+          </div>
+        </section>
+
+        <section class="panel estop-report-panel" aria-labelledby="estop-report-heading">
+          <div class="section-heading">
+            <h2 id="estop-report-heading">最近急停结果</h2>
+            <output id="estop-summary" class="numeric-reading">尚无报告</output>
+          </div>
+          <div id="estop-report" class="estop-report" aria-live="polite">
+            <p class="empty-copy">点击右上角“紧急停止”后，此处逐步显示 EstopReport。</p>
+          </div>
+        </section>
+      </div>
+
+      <section class="device-section" aria-labelledby="device-heading">
+        <div class="section-heading device-heading">
+          <h2 id="device-heading">设备面板</h2>
+          <p>七设备实时快照与安全控制</p>
+        </div>
+        <div class="device-grid">
+          <article class="panel device-card" data-device="gantry">
+            <header class="device-card-header">
+              <div class="device-identity">
+                <h3>龙门架</h3>
+                <span class="device-state-dot" data-role="connection-dot" aria-hidden="true"></span>
+                <span class="panel-state" data-role="connection-text">—</span>
+              </div>
+              <div class="lifecycle-controls" aria-label="龙门架连接控制">
+                <button type="button" data-operation-path="/api/gantry/connect" data-operation-label="连接">连接</button>
+                <button type="button" data-operation-path="/api/gantry/disconnect" data-operation-label="断开">断开</button>
+              </div>
+            </header>
+            <dl class="reading-grid">
+              <div class="reading-row"><dt>X</dt><dd><output class="reading-value numeric-reading" data-readout="gantry-x">— mm</output></dd></div>
+              <div class="reading-row"><dt>Y</dt><dd><output class="reading-value numeric-reading" data-readout="gantry-y">— mm</output></dd></div>
+              <div class="reading-row"><dt>Z</dt><dd><output class="reading-value numeric-reading" data-readout="gantry-z">— mm</output></dd></div>
+              <div class="reading-row"><dt>机器状态</dt><dd><output class="reading-value" data-readout="gantry-state">—</output></dd></div>
+              <div class="reading-row"><dt>Homed</dt><dd><output class="reading-value" data-readout="gantry-homed">—</output></dd></div>
+              <div class="reading-row"><dt>限位 Pn</dt><dd><output class="reading-value" data-readout="gantry-limits">—</output></dd></div>
+            </dl>
+            <div class="control-stack">
+              <div class="control-row">
+                <button class="primary-button" type="button" data-operation-path="/api/gantry/home" data-operation-label="归零">归零</button>
+                <button class="recovery-button" type="button" data-operation-path="/api/gantry/recover" data-operation-label="Alarm 恢复" data-requires-alarm="true">Alarm 恢复</button>
+                <label class="field-control" for="gantry-step">步长 mm
+                  <select id="gantry-step">
+                    <option value="0.5">0.5</option>
+                    <option value="1" selected>1</option>
+                    <option value="5">5</option>
+                    <option value="10">10</option>
+                    <option value="50">50</option>
+                  </select>
+                </label>
+                <label class="field-control" for="gantry-feed">进给 mm/min
+                  <select id="gantry-feed">
+                    <option value="300">300</option>
+                    <option value="1000">1000</option>
+                    <option value="2000" selected>2000</option>
+                    <option value="3000">3000</option>
+                  </select>
+                </label>
+              </div>
+              <div class="jog-grid" aria-label="龙门架六向点动">
+                <button type="button" data-jog-axis="X" data-jog-direction="-1">X−</button>
+                <button type="button" data-jog-axis="X" data-jog-direction="1">X+</button>
+                <button type="button" data-jog-axis="Y" data-jog-direction="-1">Y−</button>
+                <button type="button" data-jog-axis="Y" data-jog-direction="1">Y+</button>
+                <button type="button" data-jog-axis="Z" data-jog-direction="-1">Z−</button>
+                <button type="button" data-jog-axis="Z" data-jog-direction="1">Z+</button>
+              </div>
+              <form id="gantry-move-form" class="coordinate-form">
+                <label class="field-control">X mm<input name="x" type="number" data-config-range="gantry-x" step="0.1" required></label>
+                <label class="field-control">Y mm<input name="y" type="number" data-config-range="gantry-y" step="0.1" required></label>
+                <label class="field-control">Z mm<input name="z" type="number" data-config-range="gantry-z" step="0.1" required></label>
+                <button class="primary-button" type="submit">绝对移动 GO</button>
+                <button type="button" id="gantry-dry-run-button">仅校验</button>
+              </form>
+              <div class="control-row">
+                <button type="button" data-operation-path="/api/gantry/homing-diagnostics" data-operation-label="归零诊断" data-operation-method="GET">归零诊断</button>
+                <button type="button" id="gantry-z-release-button">释放 Z 制动</button>
+                <button type="button" id="gantry-z-hold-button">闭合 Z 制动</button>
+                <button class="danger-outline-button" type="button" id="gantry-halt-button" data-always-enabled="true">立即停止</button>
+              </div>
+            </div>
+            <div class="panel-feedback">
+              <output class="panel-operation numeric-reading" data-role="operation-id" hidden></output>
+              <p class="panel-message" data-role="message" aria-live="polite">就绪</p>
+            </div>
+          </article>
+
+          <article class="panel device-card" data-device="heater">
+            <header class="device-card-header">
+              <div class="device-identity">
+                <h3>加热台</h3>
+                <span class="device-state-dot" data-role="connection-dot" aria-hidden="true"></span>
+                <span class="panel-state" data-role="connection-text">—</span>
+              </div>
+              <div class="lifecycle-controls" aria-label="加热台连接控制">
+                <button type="button" data-operation-path="/api/heater/connect" data-operation-label="连接">连接</button>
+                <button type="button" data-operation-path="/api/heater/disconnect" data-operation-label="断开">断开</button>
+              </div>
+            </header>
+            <dl class="reading-grid">
+              <div class="reading-row"><dt>PV</dt><dd><output class="reading-value numeric-reading" data-readout="heater-pv">— ℃</output></dd></div>
+              <div class="reading-row"><dt>SV</dt><dd><output class="reading-value numeric-reading" data-readout="heater-sv">— ℃</output></dd></div>
+            </dl>
+            <div class="control-stack">
+              <form id="heater-sv-form" class="control-row">
+                <label class="field-control">SV ℃<input name="sv_c" type="number" min="0" data-config-max="heater" step="0.1" required></label>
+                <button class="primary-button" type="submit">设定</button>
+                <span class="control-note">≤150 ℃，上限来自 constants.yaml</span>
+              </form>
+              <div class="control-row">
+                <button type="button" data-operation-path="/api/heater/pv" data-operation-method="GET" data-operation-label="读取 PV">读取 PV</button>
+              </div>
+            </div>
+            <div class="panel-feedback">
+              <output class="panel-operation numeric-reading" data-role="operation-id" hidden></output>
+              <p class="panel-message" data-role="message" aria-live="polite">就绪</p>
+            </div>
+          </article>
+
+          <article class="panel device-card" data-device="spincoater">
+            <header class="device-card-header">
+              <div class="device-identity">
+                <h3>旋涂</h3>
+                <span class="device-state-dot" data-role="connection-dot" aria-hidden="true"></span>
+                <span class="panel-state" data-role="connection-text">—</span>
+              </div>
+              <div class="lifecycle-controls" aria-label="旋涂连接控制">
+                <button type="button" data-operation-path="/api/spincoater/connect" data-operation-label="连接">连接</button>
+                <button type="button" data-operation-path="/api/spincoater/disconnect" data-operation-label="断开">断开</button>
+              </div>
+            </header>
+            <dl class="reading-grid">
+              <div class="reading-row"><dt>目标转速</dt><dd><output class="reading-value numeric-reading" data-readout="spincoater-rpm">— RPM</output></dd></div>
+              <div class="reading-row"><dt>运行状态</dt><dd><output class="reading-value" data-readout="spincoater-running">—</output></dd></div>
+              <div class="reading-row"><dt>故障位</dt><dd><output class="reading-value" data-readout="spincoater-faults">—</output></dd></div>
+            </dl>
+            <p class="device-note">无角度反馈，不能定向停转</p>
+            <div class="control-stack">
+              <form id="spincoater-start-form" class="control-row">
+                <label class="field-control">目标 RPM<input name="rpm" type="number" min="1" data-config-max="spincoater" step="1" required></label>
+                <button class="primary-button" type="submit">启动</button>
+              </form>
+              <div class="control-row">
+                <label class="checkbox-control" for="spincoater-brake"><input id="spincoater-brake" type="checkbox" checked>停止时制动</label>
+                <button id="spincoater-stop-button" class="danger-outline-button" type="button">停止</button>
+                <button type="button" data-operation-path="/api/spincoater/fault" data-operation-method="GET" data-operation-label="读取故障">读取故障</button>
+              </div>
+            </div>
+            <div class="panel-feedback">
+              <output class="panel-operation numeric-reading" data-role="operation-id" hidden></output>
+              <p class="panel-message" data-role="message" aria-live="polite">就绪</p>
+            </div>
+          </article>
+
+          <article class="panel device-card" data-device="pipette">
+            <header class="device-card-header">
+              <div class="device-identity">
+                <h3>移液</h3>
+                <span class="device-state-dot" data-role="connection-dot" aria-hidden="true"></span>
+                <span class="panel-state" data-role="connection-text">—</span>
+              </div>
+              <div class="lifecycle-controls" aria-label="移液连接控制">
+                <button type="button" data-operation-path="/api/pipette/connect" data-operation-label="连接">连接</button>
+                <button type="button" data-operation-path="/api/pipette/disconnect" data-operation-label="断开">断开</button>
+              </div>
+            </header>
+            <dl class="reading-grid">
+              <div class="reading-row"><dt>柱塞位置</dt><dd><output class="reading-value numeric-reading" data-readout="pipette-position">— step</output></dd></div>
+              <div class="reading-row"><dt>Homed</dt><dd><output class="reading-value" data-readout="pipette-homed">—</output></dd></div>
+              <div class="reading-row"><dt>Tip</dt><dd><output class="reading-value" data-readout="pipette-tip">—</output></dd></div>
+            </dl>
+            <div class="control-stack">
+              <div class="control-row">
+                <button class="primary-button" type="button" data-operation-path="/api/pipette/home" data-operation-label="归零">归零</button>
+                <button type="button" data-operation-path="/api/pipette/eject-tip" data-operation-label="退 Tip">退 Tip</button>
+              </div>
+              <form id="pipette-volume-form" class="control-row">
+                <label class="field-control">体积 µL<input name="volume_ul" type="number" min="0" data-config-max="pipette" step="1" required></label>
+                <button class="primary-button" type="submit" data-volume-action="aspirate">吸</button>
+                <button type="submit" data-volume-action="dispense">排</button>
+              </form>
+            </div>
+            <div class="panel-feedback">
+              <output class="panel-operation numeric-reading" data-role="operation-id" hidden></output>
+              <p class="panel-message" data-role="message" aria-live="polite">就绪</p>
+            </div>
+          </article>
+
+          <article class="panel device-card" data-device="linear_stage">
+            <header class="device-card-header">
+              <div class="device-identity">
+                <h3>滑台</h3>
+                <span class="device-state-dot" data-role="connection-dot" aria-hidden="true"></span>
+                <span class="panel-state" data-role="connection-text">—</span>
+              </div>
+              <div class="lifecycle-controls" aria-label="滑台连接控制">
+                <button type="button" data-operation-path="/api/linearstage/connect" data-operation-label="连接">连接</button>
+                <button type="button" data-operation-path="/api/linearstage/disconnect" data-operation-label="断开">断开</button>
+              </div>
+            </header>
+            <dl class="reading-grid reading-grid-single">
+              <div class="reading-row"><dt>位置</dt><dd><output class="reading-value numeric-reading" data-readout="linear-stage-position">— mm</output></dd></div>
+              <div class="reading-row"><dt>Homed</dt><dd><output class="reading-value" data-readout="linear-stage-homed">—</output></dd></div>
+              <div class="reading-row"><dt>标志位</dt><dd><output class="reading-value numeric-reading" data-readout="linear-stage-flags">—</output></dd></div>
+            </dl>
+            <div class="control-stack">
+              <div class="control-row">
+                <button class="primary-button" type="button" data-operation-path="/api/linearstage/home" data-operation-label="归零">归零</button>
+                <button id="linear-stage-stop-button" class="danger-outline-button" type="button" data-always-enabled="true">立即停止</button>
+              </div>
+              <form id="linear-stage-move-form" class="control-row">
+                <label class="field-control">绝对位置 mm<input name="position_mm" type="number" data-config-range="linear-stage" step="0.1" required></label>
+                <button class="primary-button" type="submit">GO</button>
+              </form>
+            </div>
+            <div class="panel-feedback">
+              <output class="panel-operation numeric-reading" data-role="operation-id" hidden></output>
+              <p class="panel-message" data-role="message" aria-live="polite">就绪</p>
+            </div>
+          </article>
+
+          <article class="panel device-card" data-device="relay">
+            <header class="device-card-header">
+              <div class="device-identity">
+                <h3>继电器 CH3–8</h3>
+                <span class="device-state-dot" data-role="connection-dot" aria-hidden="true"></span>
+                <span class="panel-state" data-role="connection-text">—</span>
+              </div>
+              <div class="lifecycle-controls" aria-label="继电器连接控制">
+                <button type="button" data-operation-path="/api/relay/connect" data-operation-label="连接">连接</button>
+                <button type="button" data-operation-path="/api/relay/disconnect" data-operation-label="断开">断开</button>
+              </div>
+            </header>
+            <div class="relay-grid" aria-label="继电器 CH3 到 CH8 控制">
+              <div class="relay-row" data-relay-row="3"><span class="relay-channel">CH3</span><label><span class="visually-hidden">CH3 用途备注</span><input type="text" maxlength="32" placeholder="用途备注" data-relay-note="3"></label><output class="relay-state numeric-reading" data-readout="relay-3">—</output><div class="relay-actions"><button type="button" data-relay-channel="3" data-relay-on="true">ON</button><button type="button" data-relay-channel="3" data-relay-on="false">OFF</button></div></div>
+              <div class="relay-row" data-relay-row="4"><span class="relay-channel">CH4</span><label><span class="visually-hidden">CH4 用途备注</span><input type="text" maxlength="32" placeholder="用途备注" data-relay-note="4"></label><output class="relay-state numeric-reading" data-readout="relay-4">—</output><div class="relay-actions"><button type="button" data-relay-channel="4" data-relay-on="true">ON</button><button type="button" data-relay-channel="4" data-relay-on="false">OFF</button></div></div>
+              <div class="relay-row" data-relay-row="5"><span class="relay-channel">CH5</span><label><span class="visually-hidden">CH5 用途备注</span><input type="text" maxlength="32" placeholder="用途备注" data-relay-note="5"></label><output class="relay-state numeric-reading" data-readout="relay-5">—</output><div class="relay-actions"><button type="button" data-relay-channel="5" data-relay-on="true">ON</button><button type="button" data-relay-channel="5" data-relay-on="false">OFF</button></div></div>
+              <div class="relay-row" data-relay-row="6"><span class="relay-channel">CH6</span><label><span class="visually-hidden">CH6 用途备注</span><input type="text" maxlength="32" placeholder="用途备注" data-relay-note="6"></label><output class="relay-state numeric-reading" data-readout="relay-6">—</output><div class="relay-actions"><button type="button" data-relay-channel="6" data-relay-on="true">ON</button><button type="button" data-relay-channel="6" data-relay-on="false">OFF</button></div></div>
+              <div class="relay-row" data-relay-row="7"><span class="relay-channel">CH7</span><label><span class="visually-hidden">CH7 用途备注</span><input type="text" maxlength="32" placeholder="用途备注" data-relay-note="7"></label><output class="relay-state numeric-reading" data-readout="relay-7">—</output><div class="relay-actions"><button type="button" data-relay-channel="7" data-relay-on="true">ON</button><button type="button" data-relay-channel="7" data-relay-on="false">OFF</button></div></div>
+              <div class="relay-row" data-relay-row="8"><span class="relay-channel">CH8</span><label><span class="visually-hidden">CH8 用途备注</span><input type="text" maxlength="32" placeholder="用途备注" data-relay-note="8"></label><output class="relay-state numeric-reading" data-readout="relay-8">—</output><div class="relay-actions"><button type="button" data-relay-channel="8" data-relay-on="true">ON</button><button type="button" data-relay-channel="8" data-relay-on="false">OFF</button></div></div>
+            </div>
+            <div class="panel-feedback">
+              <output class="panel-operation numeric-reading" data-role="operation-id" hidden></output>
+              <p class="panel-message" data-role="message" aria-live="polite">就绪</p>
+            </div>
+          </article>
+
+          <article class="panel device-card" data-device="gripper">
+            <header class="device-card-header">
+              <div class="device-identity">
+                <h3>夹爪</h3>
+                <span class="device-state-dot" data-role="connection-dot" aria-hidden="true"></span>
+                <span class="panel-state" data-role="connection-text">—</span>
+              </div>
+              <span class="panel-transport">经继电器 CH1</span>
+            </header>
+            <dl class="reading-grid reading-grid-single">
+              <div class="reading-row"><dt>当前指令状态</dt><dd><output class="reading-value" data-readout="gripper-state">—</output></dd></div>
+            </dl>
+            <div class="control-stack">
+              <div class="control-row">
+                <button class="primary-button" type="button" data-operation-path="/api/gripper/close" data-operation-label="夹紧">夹紧</button>
+                <button type="button" data-operation-path="/api/gripper/open" data-operation-label="张开">张开</button>
+              </div>
+            </div>
+            <div class="panel-feedback">
+              <output class="panel-operation numeric-reading" data-role="operation-id" hidden></output>
+              <p class="panel-message" data-role="message" aria-live="polite">就绪</p>
+            </div>
+          </article>
+
+          <article id="routine-panel" class="panel device-card routine-card" aria-labelledby="routine-heading">
+            <header class="device-card-header">
+              <div class="device-identity">
+                <h3 id="routine-heading">程序</h3>
+                <span id="routine-record-dot" class="device-state-dot" aria-hidden="true"></span>
+                <span id="routine-record-state" class="panel-state">未录制</span>
+              </div>
+              <output id="routine-step-count" class="numeric-reading">0 步</output>
+            </header>
+
+            <div class="routine-recording-section">
+              <form id="routine-record-form" class="control-row">
+                <label class="field-control" for="routine-name-input">程序名称
+                  <input id="routine-name-input" name="name" type="text" maxlength="120" autocomplete="off" required>
+                </label>
+                <button class="primary-button" type="submit" data-routine-action="arm">开始录制</button>
+                <button id="routine-disarm-button" type="button">停止录制并保存</button>
+              </form>
+              <output id="routine-recent-step" class="routine-step-label">最近步骤：—</output>
+            </div>
+
+            <div class="routine-list-section">
+              <table class="routine-table">
+                <thead>
+                  <tr>
+                    <th scope="col">名称</th>
+                    <th scope="col">步数</th>
+                    <th scope="col">时长 s</th>
+                    <th scope="col">运动</th>
+                    <th scope="col">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="routine-list-body">
+                  <tr><td class="routine-empty" colspan="5">暂无程序</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="routine-replay-section">
+              <span class="control-note">重放进度</span>
+              <output id="routine-replay-progress" class="numeric-reading">0/0</output>
+              <output id="routine-replay-label" class="routine-step-label">当前步骤：—</output>
+              <button id="routine-abort-button" class="danger-outline-button" type="button" data-always-enabled="true">中止重放</button>
+            </div>
+
+            <div class="panel-feedback">
+              <output id="routine-operation-id" class="panel-operation numeric-reading" hidden></output>
+              <p id="routine-message" class="panel-message" aria-live="polite">就绪</p>
+            </div>
+          </article>
+
+          <article id="builder-panel" class="panel device-card routine-card" aria-labelledby="builder-heading">
+            <header class="device-card-header">
+              <div class="device-identity">
+                <h3 id="builder-heading">多轮程序与工艺坐标</h3>
+              </div>
+              <span class="panel-transport">配置驱动</span>
+            </header>
+            <form id="multi-round-form" class="builder-grid">
+              <label class="field-control">源程序<input name="source_name" type="text" maxlength="120" required></label>
+              <label class="field-control">新程序名<input name="output_name" type="text" maxlength="120" required></label>
+              <label class="field-control">轮数<input name="rounds" type="number" min="1" max="100" value="2" required></label>
+              <label class="field-control">每轮 X 偏移 mm<input name="offset_x_mm" type="number" step="0.1" value="0"></label>
+              <label class="field-control">每轮 Y 偏移 mm<input name="offset_y_mm" type="number" step="0.1" value="0"></label>
+              <label class="field-control">每轮 Z 偏移 mm<input name="offset_z_mm" type="number" step="0.1" value="0"></label>
+              <button class="primary-button" type="submit">生成多轮程序</button>
+            </form>
+            <form id="coordinate-form" class="coordinate-editor">
+              <label class="field-control">工艺坐标 JSON
+                <textarea name="coordinates" rows="7" spellcheck="false">{"points": {}}</textarea>
+              </label>
+              <div class="control-row">
+                <button type="button" id="coordinate-load-button">读取坐标</button>
+                <button class="primary-button" type="submit">校验并保存</button>
+              </div>
+            </form>
+            <div class="panel-feedback">
+              <p id="builder-message" class="panel-message" aria-live="polite">就绪</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel event-panel" aria-labelledby="event-heading">
+        <div class="section-heading event-heading">
+          <h2 id="event-heading">事件日志</h2>
+          <output id="event-count" class="numeric-reading">0 条</output>
+        </div>
+        <ol id="event-log" class="event-log" aria-live="polite" aria-relevant="additions">
+          <li class="event-empty">尚无事件</li>
+        </ol>
+      </section>
+    </main>
+
+    <script type="module" src="/static/app.js"></script>
+  </body>
+</html>
